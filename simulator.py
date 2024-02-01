@@ -1,5 +1,8 @@
 from typing import Union
 from random import randint
+from itertools import combinations_with_replacement
+from pprint import pprint
+import pandas as pd
 
 
 def card2val(card: str) -> Union[int, tuple[int, int]]:
@@ -8,6 +11,7 @@ def card2val(card: str) -> Union[int, tuple[int, int]]:
     return int(card)
 
 
+# TODO: optimise
 def hand2val(hand: str) -> int:
     num_aces = hand.count('A')
     hard_cards = hand.replace('A', '')
@@ -21,17 +25,20 @@ class Blackjack:
 
     def __init__(
             self,
-            n_packs: int = 3,
+            n_packs: int = 4,
+            dealer: str = '',
+            player: str = ''
     ):
         cards = 'A23456789TJQK'
         self.n_packs = n_packs
         self.shoe = list(cards) * n_packs
-        self.dealer = ''
-        self.player = ''
+        self.dealer = dealer
+        self.player = player
         self.status = 'LIVE'
 
         self.draw = self._draw()
-
+        assert len(self.dealer) in [0, 1], 'Dealer must initially have 0 or 1 cards'
+        assert len(self.player) in [0, 2], 'Player must initially have 0 or 2 cards'
         self.__setup()
 
     def _draw(self):
@@ -40,11 +47,18 @@ class Blackjack:
         yield -1
 
     def __setup(self):
-        self.player += next(self.draw)
-        self.player += next(self.draw)
 
-        self.dealer += next(self.draw)
-        self.dealer += next(self.draw)  # do I need to draw here?
+        if len(self.player) == 0:
+            self.player += next(self.draw)
+            self.player += next(self.draw)
+        else:
+            pass  # remove from shoe
+
+        if len(self.dealer) == 0:
+            self.dealer += next(self.draw)
+            self.dealer += next(self.draw)  # do I need to draw here?
+        else:
+            pass  # remove from show
 
         if self.player_val == self.dealer_val == 21:
             self.status = 'DRAW'
@@ -113,30 +127,52 @@ class Blackjack:
 
     def __repr__(self):
         return '\n'.join([
-            '*' * 10 + self.status + '*' * 10,
+            '' * 10 + self.status + '' * 10,
             f'Dealer Hand: {self.dealer} ({self.dealer_val})',
             f'Player Hand: {self.player} ({self.player_val})',
         ])
 
 
 if __name__ == '__main__':
-    n_sims = 10_000
+    n_sims = 5_000
+    n_packs = 4
+    cards = 'A23456789T'
 
-    won, draw, lost = 0, 0, 0
+    player_combs = list(combinations_with_replacement(cards, 2))
+    combs = []
+    for pc in combinations_with_replacement(cards, 2):
+        for c in cards:
+            combs.append((''.join(pc), c))
 
-    for _ in range(n_sims):
-        game = Blackjack()
-        if game.player_val <= 15:
-            game.deal()
-        game.stand()
+    outcomes = {}
+    for player, dealer in combs:
+        print(player, dealer)
+        p_val, d_val = hand2val(player), hand2val(dealer)
+        outcomes[(p_val, d_val)] = {}
+        for n_hits in range(2):
+            outcomes[(p_val, d_val)][n_hits] = {'won': 0, 'draw': 0, 'lost': 0}
+            for _ in range(n_sims):
+                game = Blackjack(n_packs=n_packs, player=player, dealer=dealer)
 
-        if game.status in ['WON', 'BLACKJACK']:
-            won += 1
-        elif game.status == 'DRAW':
-            draw += 1
-        elif game.status == 'LOST':
-            lost += 1
-        print(game)
+                for _ in range(n_hits):
+                    game.deal()
+                game.stand()
 
-    print(f'{lost=} {draw=} {won=}')
-    print(f'lost={int(lost/n_sims*100)}% draw={int(draw/n_sims*100)}% won={int(won/n_sims*100)}%')
+                if game.status in ['WON', 'BLACKJACK']:
+                    outcomes[(p_val, d_val)][n_hits]['won'] += 1
+                elif game.status == 'DRAW':
+                    outcomes[(p_val, d_val)][n_hits]['draw'] += 1
+                elif game.status == 'LOST':
+                    outcomes[(p_val, d_val)][n_hits]['lost'] += 1
+
+    best_outcome = {}
+    for player_dealer, options in outcomes.items():
+        n_hits = max(options, key=lambda key: options[key]['won'] / (options[key]['won'] + options[key]['lost']))
+        win_pct = options[n_hits]['won'] / (options[n_hits]['won'] + options[n_hits]['lost'])
+        best_outcome[player_dealer] = (n_hits, win_pct)
+    best_decision = {k: v[0] for k, v in best_outcome.items()}
+
+    df = pd.DataFrame(best_decision.values(), index=list(best_decision.keys()))
+    df.index = pd.MultiIndex.from_tuples(df.index, names=['player', 'dealer'])
+    df = df.unstack().replace({1: 'H', 0: 'S'})
+    pprint(df)
