@@ -1,8 +1,8 @@
 from typing import Union
-from random import randint
-from itertools import combinations_with_replacement
+from random import randint, random
 from pprint import pprint
 import pandas as pd
+from itertools import product
 
 
 def card2val(card: str) -> Union[int, tuple[int, int]]:
@@ -23,26 +23,35 @@ def hand2val(hand: str) -> int:
 
 class Blackjack:
 
+    WON = 'WON'
+    LOST = 'LOST'
+    DRAW = 'DRAW'
+    LIVE = 'LIVE'
+
     def __init__(
             self,
             n_packs: int = 4,
             dealer: str = '',
-            player: str = ''
+            player: str = '',
     ):
         cards = 'A23456789TJQK'
         self.n_packs = n_packs
         self.shoe = list(cards) * n_packs
         self.dealer = dealer
+        self.init_dealer = ''
+        self.init_dealer_val = ''
         self.player = player
-        self.status = 'LIVE'
+        self.status = Blackjack.LIVE
+        self.is_blackjack = False
 
-        self.draw = self._draw()
-        assert len(self.dealer) in [0, 1], 'Dealer must initially have 0 or 1 cards'
-        assert len(self.player) in [0, 2], 'Player must initially have 0 or 2 cards'
+        self.draw = self.__hit()
         self.__setup()
 
-    def _draw(self):
-        while self.status == 'LIVE':
+        assert len(self.dealer) == 2, f'Dealer must have 2 cards but has {len(self.dealer[0])}'
+        assert len(self.player) == 2, f'Player must have 2 cards but has {len(self.player[0])}'
+
+    def __hit(self):
+        while self.status == Blackjack.LIVE:
             yield self.shoe.pop(randint(1, len(self.shoe) - 1))
         yield -1
 
@@ -52,21 +61,24 @@ class Blackjack:
             self.player += next(self.draw)
             self.player += next(self.draw)
         else:
-            pass  # remove from shoe
+            pass  # TODO: remove from shoe
 
         if len(self.dealer) == 0:
             self.dealer += next(self.draw)
             self.dealer += next(self.draw)  # do I need to draw here?
         else:
-            pass  # remove from show
+            pass  # TODO: remove from show
 
         if self.player_val == self.dealer_val == 21:
-            self.status = 'DRAW'
+            self.status = Blackjack.DRAW
         elif self.dealer_val == 21:
-            self.status = 'LOST'
+            self.status = Blackjack.LOST
 
-    def deal(self):
-        if self.status != 'LIVE':
+        self.init_dealer = self.dealer[0]
+        self.init_dealer_val = hand2val(self.init_dealer)
+
+    def hit(self):
+        if self.status != Blackjack.LIVE:
             return
 
         if self.player_val == 21:
@@ -75,31 +87,32 @@ class Blackjack:
         self.player += next(self.draw)
 
         if self.player_val > 21:
-            self.status = 'LOST'
+            self.status = Blackjack.LOST
 
     def stand(self):
-        if self.status != 'LIVE':
+        if self.status != Blackjack.LIVE:
             return
 
         while self.dealer_val <= 16:
             self.dealer += next(self.draw)
 
         if self.dealer_val > 21:
-            self.status = 'WON'
+            self.status = Blackjack.WON
         elif self.dealer_val == self.player_val:
             if self.is_player_blackjack == self.is_dealer_blackjack:
-                self.status = 'DRAW'
+                self.status = Blackjack.DRAW
 
             if self.is_player_blackjack:
-                self.status = 'BLACKJACK'
+                self.is_blackjack = True
+                self.status = Blackjack.WON
 
             if self.is_dealer_blackjack:
-                self.status = 'LOST'
+                self.status = Blackjack.LOST
 
         elif self.dealer_val < self.player_val:
-            self.status = 'WON'
+            self.status = Blackjack.WON
         else:
-            self.status = 'LOST'
+            self.status = Blackjack.LOST
 
     @property
     def player_card_count(self):
@@ -133,46 +146,46 @@ class Blackjack:
         ])
 
 
-if __name__ == '__main__':
-    n_sims = 5_000
-    n_packs = 4
-    cards = 'A23456789T'
+def get_win_ratio(x):
+    if x[Blackjack.WON] + x[Blackjack.LOST] == 0: return 0.5
+    return x[Blackjack.WON] / (x[Blackjack.WON] + x[Blackjack.LOST])
 
-    player_combs = list(combinations_with_replacement(cards, 2))
-    combs = []
-    for pc in combinations_with_replacement(cards, 2):
-        for c in cards:
-            combs.append((''.join(pc), c))
 
-    outcomes = {}
-    for player, dealer in combs:
-        print(player, dealer)
-        p_val, d_val = hand2val(player), hand2val(dealer)
-        outcomes[(p_val, d_val)] = {}
-        for n_hits in range(2):
-            outcomes[(p_val, d_val)][n_hits] = {'won': 0, 'draw': 0, 'lost': 0}
-            for _ in range(n_sims):
-                game = Blackjack(n_packs=n_packs, player=player, dealer=dealer)
+def get_basic_strat(n_sims=100_000):
 
-                for _ in range(n_hits):
-                    game.deal()
+    def_state = {Blackjack.WON: 0, Blackjack.LOST: 0, Blackjack.DRAW: 0}
+    player_starting_vals = range(4, 22)
+    dealer_starting_vals = range(2, 12)
+    outcomes = {k: {'H': def_state.copy(), 'S': def_state.copy()} for k in
+                product(player_starting_vals, dealer_starting_vals)}
+
+    for i in range(1, n_sims + 1):
+        if i % 5_000 == 0: print(f'{int(i/n_sims*100)}%')
+        game = Blackjack()
+        states = []
+        while game.status == Blackjack.LIVE:
+            game_map = (game.player_val, game.init_dealer_val)
+            u = randint(0, 1)
+            if u == 0 or game.player_val == 21:
+                states.append((game_map, 'S'))
                 game.stand()
+            else:
+                states.append((game_map, 'H'))
+                game.hit()
 
-                if game.status in ['WON', 'BLACKJACK']:
-                    outcomes[(p_val, d_val)][n_hits]['won'] += 1
-                elif game.status == 'DRAW':
-                    outcomes[(p_val, d_val)][n_hits]['draw'] += 1
-                elif game.status == 'LOST':
-                    outcomes[(p_val, d_val)][n_hits]['lost'] += 1
+        for game_map, decision in states:
+            outcomes[game_map][decision][game.status] += 1
+    pprint(outcomes)
 
-    best_outcome = {}
-    for player_dealer, options in outcomes.items():
-        n_hits = max(options, key=lambda key: options[key]['won'] / (options[key]['won'] + options[key]['lost']))
-        win_pct = options[n_hits]['won'] / (options[n_hits]['won'] + options[n_hits]['lost'])
-        best_outcome[player_dealer] = (n_hits, win_pct)
-    best_decision = {k: v[0] for k, v in best_outcome.items()}
+    best_play = {hands: 'H' if get_win_ratio(outcomes[hands]['H']) > get_win_ratio(outcomes[hands]['S']) else 'S'
+                 for hands, res in outcomes.items()}
+    df_best_play = pd.DataFrame(best_play.values(), index=list(best_play.keys()))
+    df_best_play.index = pd.MultiIndex.from_tuples(df_best_play.index, names=['player', 'dealer'])
+    df_best_play = df_best_play.unstack().replace({1: 'H', 0: 'S'})
 
-    df = pd.DataFrame(best_decision.values(), index=list(best_decision.keys()))
-    df.index = pd.MultiIndex.from_tuples(df.index, names=['player', 'dealer'])
-    df = df.unstack().replace({1: 'H', 0: 'S'})
+    return df_best_play
+
+
+if __name__ == '__main__':
+    df = get_basic_strat()
     pprint(df)
