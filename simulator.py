@@ -2,6 +2,8 @@ from copy import deepcopy
 from typing import Union, List
 from random import randint, choice
 from pprint import pprint
+
+import numpy as np
 import pandas as pd
 from itertools import product
 from collections import defaultdict
@@ -268,10 +270,10 @@ class Blackjack:
         if player is None: return
         player.log_decision(GameDecision.SPLIT)
 
-        assert not player.hand.is_splittable, f'Cannot Split {player.hand}!'
+        assert player.hand.is_splittable, f'Cannot Split {player.hand}!'
 
-        player.hand = player.hand[0]
-        new_player = Player(name=player.name, hand=player.hand)
+        player.hand = Hand([player.hand.cards[0]])
+        new_player = Player(name=player.name, hand=deepcopy(player.hand))
 
         self.players.insert(self.player_turn+1, new_player)
         player.deal_card(next(self.draw))
@@ -282,10 +284,11 @@ class Blackjack:
     def play_random(self):
         player = self.next_player()
         if player is None or player.status == GameState.STAND: return
-        # if player.decision_hist: print(f'{player} ({player.decision_hist[-1]})')
 
         if player.hand.value == 21:
             decision = GameDecision.STAND
+        elif player.hand.is_splittable:
+            decision = choice([GameDecision.STAND, GameDecision.HIT, GameDecision.SPLIT])
         else:
             decision = choice([GameDecision.STAND, GameDecision.HIT])
 
@@ -345,8 +348,7 @@ def get_best_decision(x: dict, n_sims: int):
 def get_basic_strategy(n_sims=100_000):
 
     cards = 'A23456789T'
-    # noinspection PyTypeChecker
-    player_starting_vals = list(range(5, 22)) + [f'{c},{c}' for c in cards] + [f'A,{c}' for c in cards[1:]]
+    player_starting_vals = list(np.arange(2, 22)) + [f'{c},{c}' for c in cards] + [f'A,{c}' for c in cards[1:]]
     dealer_starting_vals = range(2, 12)
     outcomes = {
         k: {GameDecision.HIT: 0, GameDecision.STAND: 0, GameDecision.SPLIT: 0}
@@ -366,15 +368,14 @@ def get_basic_strategy(n_sims=100_000):
             if hand.is_splittable:
                 c1 = 'T' if hand.cards[0].rank in 'JQK' else hand.cards[0]
                 c2 = 'T' if hand.cards[1].rank in 'JQK' else hand.cards[1]
-
-                outcomes[(f'{c1},{c2}', dealer_first_card)][decision] += players_profit[player.name]
+                key = f'{c1},{c2}'
             elif hand.is_soft_value:
                 c = hand.cards[0] if hand.cards[1].rank == 'A' else hand.cards[1]
                 c = 'T' if c.rank in 'JQK' else c
-
-                outcomes[(f'A,{c}', dealer_first_card)][decision] += players_profit[player.name]
+                key = f'A,{c}'
             else:
-                outcomes[(hand.value, dealer_first_card)][decision] += players_profit[player.name]
+                key = hand.value
+            outcomes[(key, dealer_first_card)][decision] += players_profit[player.name]
 
     pprint(outcomes)
 
@@ -386,32 +387,30 @@ def get_basic_strategy(n_sims=100_000):
     return df_best_play
 
 
+def simulate_hand(players: List[Hand], dealer: Hand, n_sims=10_000):
+    res = {GameDecision.HIT: 0, GameDecision.STAND: 0}
+
+    for i in range(n_sims):
+        game = Blackjack(
+            n_packs=4,
+            n_players=len(players),
+            player_hands=deepcopy(players),
+            dealer_hand=deepcopy(dealer),
+        )
+        game.play_full_random()
+        decision = game.players[0].decision_hist[-1][1]
+        status = game.players[0].status
+        print(game)
+        print(decision, status)
+
+        res[decision] += game.get_players_profit()[0]
+
+    print('Expected Profit')
+    print(GameDecision.HIT, res[GameDecision.HIT] / n_sims)
+    print(GameDecision.STAND, res[GameDecision.STAND] / n_sims)
+
+
 if __name__ == '__main__':
-
-    if 0:
-
-        res = {
-            GameDecision.HIT: 0,
-            GameDecision.STAND: 0,
-        }
-        n_sims = 10_000
-        for i in range(n_sims):
-            game = Blackjack(
-                n_packs=None,
-                n_players=1,
-                player_hands=[Hand('23')],
-                dealer_hand=Hand('2'),
-            )
-            game.play_full_random()
-            decision = game.players[0].decision_hist[-1][1]
-            status = game.players[0].status
-            print(game)
-            print(decision, status)
-
-            res[decision] += game.get_players_profit()[0]
-
-        print('H', res[GameDecision.HIT] / n_sims)
-        print('S', res[GameDecision.STAND] / n_sims)
-
-    df = get_basic_strategy()
+    # simulate_hand([Hand('23')], Hand('2'))
+    df = get_basic_strategy(n_sims=10_000)
     pprint(df)
