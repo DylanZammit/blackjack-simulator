@@ -4,6 +4,7 @@ from random import randint, choice
 from pprint import pprint
 import pandas as pd
 from itertools import product
+from collections import defaultdict
 from dataclasses import dataclass
 
 
@@ -159,8 +160,10 @@ class Blackjack:
             n_players: int = 1,
             player_hands: List[Hand] = None,
             dealer_hand: Hand = None,
+            blackjack_payout: float = 1.5,
     ):
         cards = 'A23456789TJQK'
+        self.blackjack_payout = blackjack_payout
         self.n_packs = n_packs
         self.shoe = list(cards) * n_packs * 4 if n_packs is not None else list(cards)
         self.dealer = Player('dealer')
@@ -305,6 +308,23 @@ class Blackjack:
     def n_players(self):
         return len(self.players)
 
+    def get_players_profit(self) -> defaultdict:
+        players = defaultdict(int)
+
+        for player in self.players:
+            if player.status == GameState.WON and player.is_blackjack:
+                player.payout = self.blackjack_payout
+            elif player.status == GameState.WON:
+                player.payout = 1
+            elif player.status == GameState.DRAW:
+                player.payout = 0
+            elif player.status == GameState.LOST:
+                player.payout = -1
+
+            players[player.name] += player.payout
+
+        return players
+
     def __repr__(self):
         out = ['*' * 30, f'Dealer Hand: {self.dealer.hand.cards} ({self.dealer.hand.value})']
 
@@ -314,20 +334,22 @@ class Blackjack:
         return '\n'.join(out)
 
 
-def get_win_ratio(x):
-    if x[GameState.WON] + x[GameState.LOST] == 0: return 0.5
-    return x[GameState.WON] / (x[GameState.WON] + x[GameState.LOST])
+def get_best_decision(x: dict, n_sims: int):
+
+    hit_exp = x[GameDecision.HIT] / n_sims
+    stand_exp = x[GameDecision.STAND] / n_sims
+
+    return GameDecision.HIT if hit_exp > stand_exp else GameDecision.STAND
 
 
-def get_basic_strategy(n_sims=10_000):
+def get_basic_strategy(n_sims=100_000):
 
-    def_state = {GameState.WON: 0, GameState.LOST: 0, GameState.DRAW: 0}
     cards = 'A23456789T'
     # noinspection PyTypeChecker
     player_starting_vals = list(range(5, 22)) + [f'{c},{c}' for c in cards] + [f'A,{c}' for c in cards[1:]]
     dealer_starting_vals = range(2, 12)
     outcomes = {
-        k: {GameDecision.HIT: def_state.copy(), GameDecision.STAND: def_state.copy(), GameDecision.SPLIT: def_state.copy()}
+        k: {GameDecision.HIT: 0, GameDecision.STAND: 0, GameDecision.SPLIT: 0}
         for k in product(player_starting_vals, dealer_starting_vals)
     }
     for i in range(1, n_sims + 1):
@@ -338,26 +360,25 @@ def get_basic_strategy(n_sims=10_000):
 
         dealer_first_card = 11 if game.dealer.hand.cards[0] == 'A' else game.dealer.hand.cards[0].value
 
+        players_profit = game.get_players_profit()
         for player in game.players:
-            for hand, decision in player.decision_hist:
+            hand, decision = player.decision_hist[-1]
+            if hand.is_splittable:
+                c1 = 'T' if hand.cards[0].rank in 'JQK' else hand.cards[0]
+                c2 = 'T' if hand.cards[1].rank in 'JQK' else hand.cards[1]
 
-                if hand.is_splittable:
-                    c1 = 'T' if hand.cards[0].rank in 'JQK' else hand.cards[0]
-                    c2 = 'T' if hand.cards[1].rank in 'JQK' else hand.cards[1]
+                outcomes[(f'{c1},{c2}', dealer_first_card)][decision] += players_profit[player.name]
+            elif hand.is_soft_value:
+                c = hand.cards[0] if hand.cards[1].rank == 'A' else hand.cards[1]
+                c = 'T' if c.rank in 'JQK' else c
 
-                    outcomes[(f'{c1},{c2}', dealer_first_card)][decision][player.status] += 1
-                elif hand.is_soft_value:
-                    c = hand.cards[0] if hand.cards[1].rank == 'A' else hand.cards[1]
-                    c = 'T' if c.rank in 'JQK' else c
-
-                    outcomes[(f'A,{c}', dealer_first_card)][decision][player.status] += 1
-                else:
-                    outcomes[(hand.value, dealer_first_card)][decision][player.status] += 1
+                outcomes[(f'A,{c}', dealer_first_card)][decision] += players_profit[player.name]
+            else:
+                outcomes[(hand.value, dealer_first_card)][decision] += players_profit[player.name]
 
     pprint(outcomes)
 
-    best_play = {hands: GameDecision.HIT if get_win_ratio(outcomes[hands][GameDecision.HIT]) > get_win_ratio(outcomes[hands][GameDecision.STAND]) else GameDecision.STAND
-                 for hands, res in outcomes.items()}
+    best_play = {hands: get_best_decision(outcomes[hands], n_sims) for hands, _ in outcomes.items()}
     df_best_play = pd.DataFrame(best_play.values(), index=list(best_play.keys()))
     df_best_play.index = pd.MultiIndex.from_tuples(df_best_play.index, names=['player', 'dealer'])
     df_best_play = df_best_play.unstack().replace({1: GameDecision.HIT, 0: GameDecision.STAND})
@@ -368,36 +389,29 @@ def get_basic_strategy(n_sims=10_000):
 if __name__ == '__main__':
 
     if 0:
+
         res = {
-            decision: {GameState.WON: 0, GameState.LOST: 0, 'total': 0}
-            for decision in [GameDecision.HIT, GameDecision.STAND]
+            GameDecision.HIT: 0,
+            GameDecision.STAND: 0,
         }
+        n_sims = 10_000
+        for i in range(n_sims):
+            game = Blackjack(
+                n_packs=None,
+                n_players=1,
+                player_hands=[Hand('23')],
+                dealer_hand=Hand('2'),
+            )
+            game.play_full_random()
+            decision = game.players[0].decision_hist[-1][1]
+            status = game.players[0].status
+            print(game)
+            print(decision, status)
 
-        for _ in range(100):
-            for i in range(1000):
-                game = Blackjack(
-                    n_packs=None,
-                    n_players=1,
-                    player_hands=[Hand('23')],
-                    dealer_hand=Hand('2'),
-                )
-                game.play_full_random()
-                decision = game.players[0].decision_hist[0][1]
-                status = game.players[0].status
-                print(game)
-                print(decision, status)
-                if status == GameState.DRAW: continue
-                res[decision][status] += 1
-                res[decision]['total'] += 1
+            res[decision] += game.get_players_profit()[0]
 
-            res[GameDecision.HIT]['rat'] = res[GameDecision.HIT][GameState.WON] / res[GameDecision.HIT]['total']
-            res[GameDecision.STAND]['rat'] = res[GameDecision.STAND][GameState.WON] / res[GameDecision.STAND]['total']
-            if res[GameDecision.HIT]['rat'] > res[GameDecision.STAND]['rat']:
-                print('HIT')
-            else:
-                print('STAND')
-            print(res)
-        from IPython import embed; embed()
+        print('H', res[GameDecision.HIT] / n_sims)
+        print('S', res[GameDecision.STAND] / n_sims)
 
     df = get_basic_strategy()
     pprint(df)
