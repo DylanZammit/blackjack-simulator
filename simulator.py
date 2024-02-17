@@ -75,7 +75,7 @@ class Hand:
     def __len__(self):
         return len(self.cards)
 
-    def add_card(self, card: Card):
+    def add_card(self, card: Card) -> None:
         self.cards.append(card)
 
     def __eq__(self, other):
@@ -101,27 +101,27 @@ class Hand:
         return min_val#, max_val
 
     @property
-    def num_aces(self):
+    def num_aces(self) -> int:
         return [c for c in self.cards].count('A')
 
     @property
-    def hard_cards(self):
+    def hard_cards(self) -> List[Card]:
         return [c for c in self.cards if c.rank != 'A']
 
     @property
-    def hard_value(self):
+    def hard_value(self) -> int:
         return sum(c.value for c in self.cards if c != 'A')
 
     @property
-    def is_soft_value(self):
+    def is_soft_value(self) -> bool:
         return Card('A') in self.cards
 
     @property
-    def is_blackjack(self):
+    def is_blackjack(self) -> bool:
         return len(self) == 2 and self.value == 21
 
     @property
-    def is_splittable(self):
+    def is_splittable(self) -> bool:
         return len(self) == 2 and self.cards[0].value == self.cards[1].value
 
 
@@ -136,22 +136,22 @@ class Player:
         self.status = GameState.LIVE
         self.decision_hist = []
 
-    def deal_card(self, card: Card):
+    def deal_card(self, card: Card) -> None:
         self.hand.add_card(card)
 
-    def log_decision(self, decision):
+    def log_decision(self, decision: str) -> None:
         self.decision_hist.append((deepcopy(self.hand), decision))
 
     @property
-    def card_count(self):
+    def card_count(self) -> int:
         return len(self.hand)
 
     @property
-    def is_blackjack(self):
+    def is_blackjack(self) -> bool:
         return self.hand.value == 21 and len(self.hand) == 2
 
     @property
-    def is_finished(self):
+    def is_finished(self) -> bool:
         return self.status in ['WON', 'LOST', 'DRAW']
 
     def __repr__(self):
@@ -196,7 +196,7 @@ class Blackjack:
 
         self.player_turn = 0
 
-    def next_player(self):
+    def next_player(self) -> Union[Player, None]:
 
         if all([player.is_finished or player.status == GameState.STAND for player in self.players]):
             self.hit_dealer()
@@ -218,7 +218,7 @@ class Blackjack:
             yield Card(self.shoe.pop())
         yield -1
 
-    def __setup(self):
+    def __setup(self) -> None:
 
         for player in self.players:
             player.deal_card(next(self.draw))
@@ -227,7 +227,7 @@ class Blackjack:
         self.dealer.deal_card(next(self.draw))
         self.dealer.deal_card(next(self.draw))
 
-    def hit_dealer(self):
+    def hit_dealer(self) -> None:
 
         while self.dealer.hand.value <= 16 or self.dealer.hand.value == 17 and self.dealer.hand.is_soft_value:
             self.dealer.deal_card(next(self.draw))
@@ -244,10 +244,10 @@ class Blackjack:
                 player.status = GameState.DRAW
         # self.dealer.status = GameState.GAME_OVER
 
-    def hit(self):
+    def hit(self) -> None:
         return self.__hit(self.next_player())
 
-    def __hit(self, player=None):
+    def __hit(self, player=None) -> None:
         if player is None: return
         assert player.hand.value != 21, f'Cannot hit on {player.hand}!'
 
@@ -259,17 +259,17 @@ class Blackjack:
         if player.hand.value > 21:
             player.status = GameState.LOST
 
-    def stand(self):
+    def stand(self) -> None:
         return self.__stand(self.next_player())
 
-    def __stand(self, player):
+    def __stand(self, player) -> None:
         player.log_decision(GameDecision.STAND)
         player.status = GameState.STAND
 
-    def split(self):
+    def split(self) -> None:
         return self.__split(self.next_player())
 
-    def __split(self, player):
+    def __split(self, player: Player) -> None:
         if player is None: return
         player.log_decision(GameDecision.SPLIT)
 
@@ -284,7 +284,7 @@ class Blackjack:
 
         self.player_turn += 1  # account for new hand
 
-    def play_random(self):
+    def play_random(self) -> None:
         player = self.next_player()
         if player is None or player.status == GameState.STAND: return
 
@@ -296,22 +296,22 @@ class Blackjack:
             decision = choice([GameDecision.STAND, GameDecision.HIT])
 
         if decision == GameDecision.HIT:
-            return self.__hit(player)
+            self.__hit(player)
         elif decision == GameDecision.STAND:
-            return self.__stand(player)
+            self.__stand(player)
         elif decision == GameDecision.SPLIT:
-            return self.__split(player)
+            self.__split(player)
 
-    def play_full_random(self):
+    def play_full_random(self) -> None:
         while not self.is_finished:
             self.play_random()
 
     @property
-    def is_finished(self):
+    def is_finished(self) -> bool:
         return all(player.is_finished for player in self.players)
 
     @property
-    def n_players(self):
+    def n_players(self) -> int:
         return len(self.players)
 
     def get_players_profit(self) -> defaultdict:
@@ -341,10 +341,14 @@ class Blackjack:
 
 
 def get_best_decision(x: dict):
-    hit_exp = x[GameDecision.HIT]['profit'] / x[GameDecision.HIT]['n_occ'] if x[GameDecision.HIT]['n_occ'] > 0 else -10e100
-    stand_exp = x[GameDecision.STAND]['profit'] / x[GameDecision.STAND]['n_occ'] if x[GameDecision.STAND]['n_occ'] > 0 else -10e100
+    hit_exp = x[GameDecision.HIT]['profit'] / x[GameDecision.HIT]['n_occ']# if x[GameDecision.HIT]['n_occ'] > 0 else -10e100
+    stand_exp = x[GameDecision.STAND]['profit'] / x[GameDecision.STAND]['n_occ']# if x[GameDecision.STAND]['n_occ'] > 0 else -10e100
     split_exp = x[GameDecision.SPLIT]['profit'] / x[GameDecision.SPLIT]['n_occ'] if x[GameDecision.SPLIT]['n_occ'] > 0 else -10e100
     return [GameDecision.HIT, GameDecision.STAND, GameDecision.SPLIT][np.argmax([hit_exp, stand_exp, split_exp])]
+
+
+def _get_basic_strategy():
+    pass
 
 
 def get_basic_strategy(n_sims: int = 100_000):
@@ -372,9 +376,13 @@ def get_basic_strategy(n_sims: int = 100_000):
 
             if split_hand is not None:
                 c = 'T' if split_hand.cards[0].rank in 'JQK' else split_hand.cards[0]
-                key = '{card},{card}'.format(card=c)
-                decision = GameDecision.SPLIT
-            elif hand.is_splittable:
+                key_split = '{card},{card}'.format(card=c)
+                decision_split = GameDecision.SPLIT
+
+                outcomes[(key_split, dealer_first_card)][decision_split]['profit'] += players_profit[player.name]
+                outcomes[(key_split, dealer_first_card)][decision_split]['n_occ'] += 1
+
+            if hand.is_splittable:
                 c1 = 'T' if hand.cards[0].rank in 'JQK' else hand.cards[0]
                 c2 = 'T' if hand.cards[1].rank in 'JQK' else hand.cards[1]
                 key = f'{c1},{c2}'
@@ -423,5 +431,5 @@ def simulate_hand(players: List[Hand], dealer: Hand, n_sims=10_000):
 
 if __name__ == '__main__':
     simulate_hand([Hand('23')], Hand('2'))
-    df = get_basic_strategy(n_sims=100_000)
+    df = get_basic_strategy(n_sims=10_000)
     pprint(df)
