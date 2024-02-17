@@ -7,6 +7,7 @@ import pandas as pd
 from itertools import product
 from collections import defaultdict
 from dataclasses import dataclass
+import multiprocessing
 
 
 @dataclass
@@ -339,23 +340,23 @@ class Blackjack:
         return '\n'.join(out)
 
 
-def get_best_decision(x: dict, n_sims: int):
+def get_best_decision(x: dict):
+    hit_exp = x[GameDecision.HIT]['profit'] / x[GameDecision.HIT]['n_occ'] if x[GameDecision.HIT]['n_occ'] > 0 else -10e100
+    stand_exp = x[GameDecision.STAND]['profit'] / x[GameDecision.STAND]['n_occ'] if x[GameDecision.STAND]['n_occ'] > 0 else -10e100
+    split_exp = x[GameDecision.SPLIT]['profit'] / x[GameDecision.SPLIT]['n_occ'] if x[GameDecision.SPLIT]['n_occ'] > 0 else -10e100
+    return [GameDecision.HIT, GameDecision.STAND, GameDecision.SPLIT][np.argmax([hit_exp, stand_exp, split_exp])]
 
-    hit_exp = x[GameDecision.HIT] / n_sims
-    stand_exp = x[GameDecision.STAND] / n_sims
 
-    return GameDecision.HIT if hit_exp > stand_exp else GameDecision.STAND
+def get_basic_strategy(n_sims: int = 100_000):
 
-
-def get_basic_strategy(n_sims=100_000):
-
-    values = 'A23456789T'
-    player_starting_vals = list(np.arange(5, 22)) + [f'{c},{c}' for c in values] + [f'A,{c}' for c in values[1:]]
+    player_starting_vals = list(np.arange(5, 22)) + [f'{c},{c}' for c in 'A23456789T'] + [f'A,{c}' for c in 'A23456789T'[1:]]
     dealer_starting_vals = range(2, 12)
+    def_val = {'profit': 0, 'n_occ': 0}
     outcomes = {
-        k: {GameDecision.HIT: 0, GameDecision.STAND: 0, GameDecision.SPLIT: 0}
+        k: {GameDecision.HIT: def_val.copy(), GameDecision.STAND: def_val.copy(), GameDecision.SPLIT: def_val.copy()}
         for k in product(player_starting_vals, dealer_starting_vals)
     }
+
     for i in range(1, n_sims + 1):
         if i % 5_000 == 0: print(f'{int(i/n_sims*100)}%')
         game = Blackjack(n_players=10)
@@ -367,7 +368,13 @@ def get_basic_strategy(n_sims=100_000):
         players_profit = game.get_players_profit()
         for player in game.players:
             hand, decision = player.decision_hist[-1]
-            if hand.is_splittable:
+            split_hand = next((hand for hand, decision in player.decision_hist[::-1] if decision == GameDecision.SPLIT), None)
+
+            if split_hand is not None:
+                c = 'T' if split_hand.cards[0].rank in 'JQK' else split_hand.cards[0]
+                key = '{card},{card}'.format(card=c)
+                decision = GameDecision.SPLIT
+            elif hand.is_splittable:
                 c1 = 'T' if hand.cards[0].rank in 'JQK' else hand.cards[0]
                 c2 = 'T' if hand.cards[1].rank in 'JQK' else hand.cards[1]
                 key = f'{c1},{c2}'
@@ -377,11 +384,13 @@ def get_basic_strategy(n_sims=100_000):
                 key = f'A,{c}'
             else:
                 key = hand.value
-            outcomes[(key, dealer_first_card)][decision] += players_profit[player.name]
+
+            outcomes[(key, dealer_first_card)][decision]['profit'] += players_profit[player.name]
+            outcomes[(key, dealer_first_card)][decision]['n_occ'] += 1
 
     pprint(outcomes)
 
-    best_play = {hands: get_best_decision(outcomes[hands], n_sims) for hands, _ in outcomes.items()}
+    best_play = {hands: get_best_decision(outcomes[hands]) for hands, _ in outcomes.items()}
     df_best_play = pd.DataFrame(best_play.values(), index=list(best_play.keys()))
     df_best_play.index = pd.MultiIndex.from_tuples(df_best_play.index, names=['player', 'dealer'])
     df_best_play = df_best_play.unstack().replace({1: GameDecision.HIT, 0: GameDecision.STAND})
@@ -413,6 +422,6 @@ def simulate_hand(players: List[Hand], dealer: Hand, n_sims=10_000):
 
 
 if __name__ == '__main__':
-    # simulate_hand([Hand('23')], Hand('2'))
+    simulate_hand([Hand('23')], Hand('2'))
     df = get_basic_strategy(n_sims=100_000)
     pprint(df)
