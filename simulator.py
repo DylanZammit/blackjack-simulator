@@ -345,7 +345,9 @@ def get_best_decision(x: dict):
     hit_exp = x[GameDecision.HIT]['profit'] / x[GameDecision.HIT]['n_occ'] if x[GameDecision.HIT]['n_occ'] > 0 else -10e100
     stand_exp = x[GameDecision.STAND]['profit'] / x[GameDecision.STAND]['n_occ'] if x[GameDecision.STAND]['n_occ'] > 0 else -10e100
     split_exp = x[GameDecision.SPLIT]['profit'] / x[GameDecision.SPLIT]['n_occ'] if x[GameDecision.SPLIT]['n_occ'] > 0 else -10e100
-    return [GameDecision.HIT, GameDecision.STAND, GameDecision.SPLIT][np.argmax([hit_exp, stand_exp, split_exp])]
+    best_decision = [GameDecision.HIT, GameDecision.STAND, GameDecision.SPLIT][np.argmax([hit_exp, stand_exp, split_exp])]
+    expected_profit = max([hit_exp, stand_exp, split_exp])
+    return best_decision, expected_profit
 
 
 def _get_basic_strategy():
@@ -412,13 +414,19 @@ def get_basic_strategy(n_sims: int = 10_000):
 
     pprint(outcomes)
 
-    best_play = {hands: get_best_decision(outcomes[hands]) for hands, _ in outcomes.items()}
+    best_play = {hands: get_best_decision(outcomes[hands])[0] for hands, _ in outcomes.items()}
 
     df_best_play = pd.DataFrame(best_play.values(), index=list(best_play.keys()))
     df_best_play.index = pd.MultiIndex.from_tuples(df_best_play.index, names=['player', 'dealer'])
     df_best_play = df_best_play.unstack().replace({1: GameDecision.HIT, 0: GameDecision.STAND})
 
-    return df_best_play
+    expected_profit = {hands: get_best_decision(outcomes[hands])[1] for hands, _ in outcomes.items()}
+
+    df_best_profit = pd.DataFrame(expected_profit.values(), index=list(expected_profit.keys()))
+    df_best_profit.index = pd.MultiIndex.from_tuples(df_best_profit.index, names=['player', 'dealer'])
+    df_best_profit = df_best_profit.unstack().replace({1: GameDecision.HIT, 0: GameDecision.STAND})
+
+    return df_best_play, df_best_profit
 
 
 def simulate_hand(players: List[Hand], dealer: Hand, n_sims=10_000):
@@ -445,5 +453,7 @@ def simulate_hand(players: List[Hand], dealer: Hand, n_sims=10_000):
 
 if __name__ == '__main__':
     # simulate_hand([Hand('23')], Hand('2'))
-    df = get_basic_strategy(n_sims=1_000)
-    pprint(df)
+    df_decision, df_profit = get_basic_strategy(n_sims=1_000)
+    pprint(df_decision)
+    pprint(df_profit)
+    print(df_profit.mean().mean())
