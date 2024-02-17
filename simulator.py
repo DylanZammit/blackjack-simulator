@@ -1,6 +1,6 @@
 from copy import deepcopy
 from typing import Union, List
-from random import randint, choice
+from random import randint, choice, shuffle
 from pprint import pprint
 
 import numpy as np
@@ -158,7 +158,7 @@ class Blackjack:
 
     def __init__(
             self,
-            n_packs: int = None,
+            n_packs: int = 4,
             n_players: int = 1,
             player_hands: List[Hand] = None,
             dealer_hand: Hand = None,
@@ -167,7 +167,8 @@ class Blackjack:
         cards = 'A23456789TJQK'
         self.blackjack_payout = blackjack_payout
         self.n_packs = n_packs
-        self.shoe = list(cards) * n_packs * 4 if n_packs is not None else list(cards)
+        self.shoe = list(cards) * n_packs * 4
+        shuffle(self.shoe)
         self.dealer = Player('dealer')
         self.players = [Player(i) for i in range(n_players)]
 
@@ -210,9 +211,7 @@ class Blackjack:
 
     def draw_card(self):
         while not self.is_finished:
-            card_id = randint(0, len(self.shoe) - 1)
-            val = self.shoe.pop(card_id) if self.n_packs else self.shoe[card_id]
-            yield Card(val)
+            yield Card(self.shoe.pop())
         yield -1
 
     def __setup(self):
@@ -347,8 +346,8 @@ def get_best_decision(x: dict, n_sims: int):
 
 def get_basic_strategy(n_sims=100_000):
 
-    cards = 'A23456789T'
-    player_starting_vals = list(np.arange(2, 22)) + [f'{c},{c}' for c in cards] + [f'A,{c}' for c in cards[1:]]
+    values = 'A23456789T'
+    player_starting_vals = list(np.arange(5, 22)) + [f'{c},{c}' for c in values] + [f'A,{c}' for c in values[1:]]
     dealer_starting_vals = range(2, 12)
     outcomes = {
         k: {GameDecision.HIT: 0, GameDecision.STAND: 0, GameDecision.SPLIT: 0}
