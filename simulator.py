@@ -1,8 +1,7 @@
 from copy import deepcopy
 from typing import Union, List
-from random import randint, choice, shuffle
+from random import choice, shuffle
 from pprint import pprint
-
 import numpy as np
 import pandas as pd
 from itertools import product
@@ -91,10 +90,14 @@ class Hand:
         return self.value > other.value or self.is_blackjack and not other.is_blackjack
 
     @property
-    def value(self):
-        soft_val = [self.hard_value + i + 11 * (self.num_aces - i) for i in range(self.num_aces + 1)]
-        val = max((sv for sv in soft_val if sv <= 21), default=22)
-        return val
+    def value(self) -> Union[int, tuple[int, int]]:
+        if not self.is_soft_value: return self.hard_value
+        min_val = self.hard_value + self.num_aces
+        max_val = self.hard_value + self.num_aces - 1 + 11
+        if 21 in [min_val, max_val]: return 21
+        if min_val > 21: return 22
+        if max_val > 21: return min_val
+        return min_val#, max_val
 
     @property
     def num_aces(self):
@@ -225,7 +228,7 @@ class Blackjack:
 
     def hit_dealer(self):
 
-        while self.dealer.hand.value <= 16:
+        while self.dealer.hand.value <= 16 or self.dealer.hand.value == 17 and self.dealer.hand.is_soft_value:
             self.dealer.deal_card(next(self.draw))
 
         for player in self.players:
@@ -411,5 +414,5 @@ def simulate_hand(players: List[Hand], dealer: Hand, n_sims=10_000):
 
 if __name__ == '__main__':
     # simulate_hand([Hand('23')], Hand('2'))
-    df = get_basic_strategy(n_sims=10_000)
+    df = get_basic_strategy(n_sims=100_000)
     pprint(df)
