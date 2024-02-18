@@ -44,7 +44,7 @@ class Card:
             if other in Card.deck:
                 return self.value == Card(other).value
             else:
-                raise TypeError(f'Unkonw card rank {other}')
+                raise TypeError(f'Unknown card rank {other}')
         return False
 
     def __gt__(self, other):
@@ -54,7 +54,7 @@ class Card:
             if other in Card.deck:
                 return self.value > Card(other).value
             else:
-                raise TypeError(f'Unkonw card rank {other}')
+                raise TypeError(f'Unknown card rank {other}')
         else:
             raise TypeError(f'Cannot add {type(other)}')
 
@@ -100,7 +100,17 @@ class Hand:
         if 21 in [min_val, max_val]: return 21
         if min_val > 21: return 22
         if max_val > 21: return min_val
-        return min_val  #, max_val
+        return max_val
+
+    @property
+    def soft_value(self) -> Union[int, tuple[int, int]]:
+        if not self.is_soft_value: return self.hard_value
+        min_val = self.hard_value + self.num_aces
+        max_val = self.hard_value + self.num_aces - 1 + 11
+        if 21 in [min_val, max_val]: return 21
+        if min_val > 21: return 22
+        if max_val > 21: return min_val
+        return min_val, max_val
 
     @property
     def num_aces(self) -> int:
@@ -356,20 +366,19 @@ def _get_basic_strategy():
 
 
 def get_basic_strategy(n_sims: int = 10_000):
-    splittable_hands = [f'{c},{c}' for c in 'A23456789T']
-    soft_hands = [f'A,{c}' for c in 'A23456789'[1:]]
-    hard_hands = list(np.arange(12, 21))  # hands < 12 should obviously HIT
+    splittable_hands = [f'{c}{c}' for c in 'A23456789T']
+    soft_hands = [f'A{c}' for c in 'A23456789'[1:]]
+    hard_hands = list(np.arange(5, 22))
 
     player_starting_vals = hard_hands + splittable_hands + soft_hands
     dealer_starting_vals = list(np.arange(2, 12))
     def_val = {'profit': 0, 'n_occ': 0}
     outcomes = {
         k: {GameDecision.HIT: def_val.copy(), GameDecision.STAND: def_val.copy(), GameDecision.SPLIT: def_val.copy()}
-        for k in product(hard_hands, dealer_starting_vals)
-        # for k in product(player_starting_vals, dealer_starting_vals)
+        for k in product(player_starting_vals, dealer_starting_vals)
     }
 
-    for player_val, dealer in outcomes:
+    for player_val, dealer in product(hard_hands, dealer_starting_vals):
         print(player_val, dealer)
         if isinstance(player_val, str):
             player_hand = ''.join(player_val.split(','))
@@ -381,6 +390,7 @@ def get_basic_strategy(n_sims: int = 10_000):
             player_hand = f'{c1}{c2}'
 
             if player_val == 20: player_hand = '884'
+            if player_val == 21: player_hand = '993'
 
         if dealer == 10:
             dealer_hand = 'T'
@@ -389,15 +399,19 @@ def get_basic_strategy(n_sims: int = 10_000):
         else:
             dealer_hand = str(dealer)
 
-        decisions = [GameDecision.HIT, GameDecision.STAND]
+        decisions = []
+        if player_val <= 10:  # can you technically infer these using EV?
+            decisions = [GameDecision.HIT]
+        elif 11 <= player_val < 21:
+            decisions = [GameDecision.HIT, GameDecision.STAND]
+        elif player_val == 21:
+            decisions = [GameDecision.STAND]
 
-        # if len(set(player_hand)) == 1: decisions.append(GameDecision.SPLIT)
         for decision in decisions:
             for _ in range(n_sims):
                 game = Blackjack(player_hands=[Hand(player_hand)], dealer_hand=Hand(dealer_hand))
                 if decision == GameDecision.HIT: game.hit()
                 if decision == GameDecision.STAND: game.stand()
-                # if decision == GameDecision.SPLIT: game.split()
 
                 if not game.is_finished and game.players[0].status != GameState.STAND:
                     game.stand()
@@ -416,15 +430,66 @@ def get_basic_strategy(n_sims: int = 10_000):
 
     best_play = {hands: get_best_decision(outcomes[hands])[0] for hands, _ in outcomes.items()}
 
-    df_best_play = pd.DataFrame(best_play.values(), index=list(best_play.keys()))
-    df_best_play.index = pd.MultiIndex.from_tuples(df_best_play.index, names=['player', 'dealer'])
-    df_best_play = df_best_play.unstack().replace({1: GameDecision.HIT, 0: GameDecision.STAND})
-
     expected_profit = {hands: get_best_decision(outcomes[hands])[1] for hands, _ in outcomes.items()}
+
+    # Could this be neater?
+    for soft_hand, dealer in product(soft_hands, dealer_starting_vals):
+        hand = Hand(soft_hand)
+        hand_val = hand.soft_value
+        if isinstance(hand_val, int):
+            best_play[(soft_hand, dealer)] = best_play[(hand_val, dealer)]
+            expected_profit[(soft_hand, dealer)] = expected_profit[(hand_val, dealer)]
+        elif isinstance(hand_val, tuple):
+            small_hand, big_hand = hand_val
+            big_hand_ev = expected_profit[(big_hand, dealer)]
+
+            if small_hand < 5:
+                evs = np.array([expected_profit.get((small_hand + h, dealer), np.nan) for h in range(1, 11)])
+                small_hand_ev = np.mean(evs[~np.isnan(evs)])
+            else:
+                small_hand_ev = expected_profit[(small_hand, dealer)]
+
+            if big_hand_ev > small_hand_ev:
+                best_play[(soft_hand, dealer)] = best_play[(big_hand, dealer)]
+                expected_profit[(soft_hand, dealer)] = big_hand_ev
+            else:
+                if small_hand < 5:
+                    best_play[(soft_hand, dealer)] = GameDecision.HIT
+                    expected_profit[(soft_hand, dealer)] = small_hand_ev
+                else:
+                    best_play[(soft_hand, dealer)] = best_play[(soft_hand, dealer)]
+                    expected_profit[(soft_hand, dealer)] = small_hand_ev
+
+    # could this be neater?
+    for splittable_hand, dealer in product(splittable_hands, dealer_starting_vals):
+        c = splittable_hand[0]
+        if c == 'A': continue
+        elif c == '2': continue
+        elif c == 'T': card_val = 10
+        else: card_val = int(c)
+
+        hand_val = card_val * 2
+
+        no_split_ev = expected_profit[(hand_val, dealer)]
+        no_split_bp = best_play[(hand_val, dealer)]
+
+        evs = np.array([expected_profit.get((card_val + h, dealer), np.nan) for h in range(1, 11)])
+        split_hand_ev = np.mean(evs[~np.isnan(evs)])
+
+        if split_hand_ev > no_split_ev:
+            best_play[(splittable_hand, dealer)] = GameDecision.SPLIT
+            expected_profit[(splittable_hand, dealer)] = split_hand_ev
+        else:
+            best_play[(splittable_hand, dealer)] = no_split_bp
+            expected_profit[(splittable_hand, dealer)] = no_split_ev
 
     df_best_profit = pd.DataFrame(expected_profit.values(), index=list(expected_profit.keys()))
     df_best_profit.index = pd.MultiIndex.from_tuples(df_best_profit.index, names=['player', 'dealer'])
     df_best_profit = df_best_profit.unstack().replace({1: GameDecision.HIT, 0: GameDecision.STAND})
+
+    df_best_play = pd.DataFrame(best_play.values(), index=list(best_play.keys()))
+    df_best_play.index = pd.MultiIndex.from_tuples(df_best_play.index, names=['player', 'dealer'])
+    df_best_play = df_best_play.unstack().replace({1: GameDecision.HIT, 0: GameDecision.STAND})
 
     return df_best_play, df_best_profit
 
