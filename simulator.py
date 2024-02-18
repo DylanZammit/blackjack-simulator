@@ -9,6 +9,8 @@ from collections import defaultdict
 from dataclasses import dataclass
 import multiprocessing
 
+from IPython import embed
+
 
 @dataclass
 class GameDecision:
@@ -463,8 +465,8 @@ def get_basic_strategy(n_sims: int = 10_000):
     # could this be neater?
     for splittable_hand, dealer in product(splittable_hands, dealer_starting_vals):
         c = splittable_hand[0]
-        if c == 'A': continue
-        elif c == '2': continue
+        if c == 'A': card_val = 6
+        elif c == '2': card_val = 2.5  # TODO: this is wrong!!
         elif c == 'T': card_val = 10
         else: card_val = int(c)
 
@@ -473,7 +475,12 @@ def get_basic_strategy(n_sims: int = 10_000):
         no_split_ev = expected_profit[(hand_val, dealer)]
         no_split_bp = best_play[(hand_val, dealer)]
 
-        evs = np.array([expected_profit.get((card_val + h, dealer), np.nan) for h in range(1, 11)])
+        if c == 'A':
+            evs = np.array([expected_profit.get(('A' + str(h), dealer), np.nan) for h in range(2, 11)])
+            evs = np.insert(evs, 0, expected_profit.get(12))
+        else:
+            evs = np.array([expected_profit.get((card_val + h, dealer), np.nan) for h in range(1, 11)])
+
         split_hand_ev = np.mean(evs[~np.isnan(evs)])
 
         if split_hand_ev > no_split_ev:
@@ -518,7 +525,7 @@ def simulate_hand(players: List[Hand], dealer: Hand, n_sims=10_000):
 
 if __name__ == '__main__':
     # simulate_hand([Hand('23')], Hand('2'))
-    df_decision, df_profit = get_basic_strategy(n_sims=1_000)
+    df_decision, df_profit = get_basic_strategy(n_sims=10_000)
     pprint(df_decision)
     pprint(df_profit)
     print(df_profit.mean().mean())
