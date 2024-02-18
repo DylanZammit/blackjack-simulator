@@ -401,7 +401,7 @@ def simulate_games_profit(
     return sum(simulate_game(player_hand, dealer_hand, decision) for _ in range(n_sims))
 
 
-def get_basic_strategy(n_sims: int = 10_000, run_parallel: bool = False):
+def get_basic_strategy(n_sims: int = 10_000, n_processes: int = None):
     splittable_hands = [f'{c}{c}' for c in 'A23456789T']
     soft_hands = [f'A{c}' for c in 'A23456789'[1:]]
     hard_hands = list(np.arange(5, 22))
@@ -446,9 +446,9 @@ def get_basic_strategy(n_sims: int = 10_000, run_parallel: bool = False):
 
         for decision in decisions:
 
-            if run_parallel:
+            if n_processes is not None:
 
-                n_processes = mp.cpu_count()
+                n_processes = mp.cpu_count() if n_processes == -1 else n_processes
                 n_batch = n_sims // n_processes + 1
 
                 f = partial(simulate_games_profit, player_hand=player_hand, dealer_hand=dealer_hand, decision=decision)
@@ -564,10 +564,19 @@ def simulate_hand(players: List[Hand], dealer: Hand, n_sims=10_000):
 
 
 if __name__ == '__main__':
+    import argparse
+
+    parser = argparse.ArgumentParser(description="Simulate Blackjack games and get optimal basic strategy")
+
+    parser.add_argument("-s", "--samples", type=int, default=10_000, help="Number of samples per player/dealer hand combination [def: 10_000]")
+    parser.add_argument("-p", "--processes", type=int, default=None, help="Number of processes to use (-1 for all) [def: no parallel]")
+
+    args = parser.parse_args()
+
     # simulate_hand([Hand('23')], Hand('2'))
 
     # run parallel not beneficial for < 10_000 n_sims
-    df_decision, df_profit = get_basic_strategy(n_sims=10_000, run_parallel=False)
+    df_decision, df_profit = get_basic_strategy(n_sims=args.samples, n_processes=args.processes)
     pprint(df_decision)
     pprint(df_profit)
     print(df_profit.mean().mean())
