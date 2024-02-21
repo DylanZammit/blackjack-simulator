@@ -106,7 +106,7 @@ class Hand:
 
     @property
     def soft_value(self) -> Union[int, tuple[int, int]]:
-        if not self.is_soft_value: return self.hard_value
+        if self.num_aces == 0: return self.hard_value
         min_val = self.hard_value + self.num_aces
         max_val = self.hard_value + self.num_aces - 1 + 11
         if 21 in [min_val, max_val]: return 21
@@ -128,7 +128,7 @@ class Hand:
 
     @property
     def is_soft_value(self) -> bool:
-        return Card('A') in self.cards
+        return isinstance(self.soft_value, tuple)
 
     @property
     def is_blackjack(self) -> bool:
@@ -210,7 +210,14 @@ class Blackjack:
                 # assert len(hand) == 2, 'All predefined hands must contain exactly 2 cards'
                 player.hand = hand
 
+                # remove cards from shoe
+                for card in hand.cards:
+                    self.shoe.remove(str(card))
+
             self.dealer.hand = dealer_hand
+
+            for card in dealer_hand.cards:
+                self.shoe.remove(str(card))
 
             if len(dealer_hand) == 1:
                 self.dealer.deal_card(next(self.draw))
@@ -552,6 +559,8 @@ def get_basic_strategy(n_sims: int = 10_000, n_processes: int = None):
 
 def simulate_hand(players: str, dealer: str, n_sims=10_000, quiet: bool = True):
 
+    print('*'*10 + GameDecision.HIT + '*'*10)
+
     hit_profit = simulate_games_profit(
         n_sims=n_sims,
         player_hand=players,
@@ -559,6 +568,8 @@ def simulate_hand(players: str, dealer: str, n_sims=10_000, quiet: bool = True):
         decision=GameDecision.HIT,
         quiet=quiet,
     )
+
+    print('*'*10 + GameDecision.STAND + '*'*10)
 
     stand_profit = simulate_games_profit(
         n_sims=n_sims,
@@ -585,11 +596,12 @@ if __name__ == '__main__':
 
     args = parser.parse_args()
 
-    # simulate_hand('78', 'T', 100_000)
-    # simulate_hand('78', 'A', 100_000, quiet=True)
+    # simulate_hand('75', '3', 100, quiet=False)
+    # simulate_hand('78', 'A', 10000, quiet=False)
 
-    # run parallel not beneficial for < 10_000 n_sims
-    df_decision, df_profit = get_basic_strategy(n_sims=args.samples, n_processes=args.processes)
-    pprint(df_decision)
-    pprint(df_profit)
-    print(df_profit.mean().mean())
+    if True:
+        # run parallel not beneficial for < 10_000 n_sims
+        df_decision, df_profit = get_basic_strategy(n_sims=args.samples, n_processes=args.processes)
+        pprint(df_decision)
+        pprint(df_profit)
+        print(df_profit.mean().mean())
