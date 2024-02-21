@@ -76,7 +76,7 @@ class Hand:
         if cards is None: cards = []
 
         self.cards = [Card(c) if isinstance(c, str) else c for c in cards]
-        self.is_splt = is_split
+        self.is_split = is_split
 
     def __len__(self):
         return len(self.cards)
@@ -136,11 +136,15 @@ class Hand:
 
     @property
     def is_blackjack(self) -> bool:
-        return len(self) == 2 and self.value == 21
+        return len(self) == 2 and self.value == 21  and not self.is_split
 
     @property
     def is_splittable(self) -> bool:
-        return len(self) == 2 and self.cards[0].value == self.cards[1].value and not self.is_splt
+        return len(self) == 2 and self.cards[0].value == self.cards[1].value
+
+    @property
+    def pretty_val(self):
+        return ''.join([c.rank for c in self.cards])
 
 
 class Player:
@@ -230,7 +234,9 @@ class Blackjack:
             self.__setup()
 
         self.player_turn = 0
+        self.current_player = self.players[0]
 
+    # TODO: should be a generator... REWORK THIS!!
     def next_player(self) -> Union[Player, None]:
 
         if all([player.is_finished or player.status == GameState.STAND for player in self.players]):
@@ -243,7 +249,7 @@ class Blackjack:
             player = self.players[self.player_turn % self.n_players]
             is_finished = player.is_finished
             self.player_turn += 1
-
+        self.current_player = player
         return player
 
     def draw_card(self):
@@ -285,9 +291,9 @@ class Blackjack:
         # self.dealer.status = GameState.GAME_OVER
 
     def hit(self) -> None:
-        return self.__hit(self.next_player())
+        return self.hit_player(self.next_player())
 
-    def __hit(self, player: Player = None) -> None:
+    def hit_player(self, player: Player = None) -> None:
         if player is None: return
         assert player.hand.value != 21, f'Cannot hit on {player.hand}!'
 
@@ -301,9 +307,9 @@ class Blackjack:
 
     def stand(self) -> None:
         if self.is_dealer_turn: return
-        return self.__stand(self.next_player())
+        return self.stand_player(self.next_player())
 
-    def __stand(self, player: Player) -> None:
+    def stand_player(self, player: Player) -> None:
         player.log_decision(GameDecision.STAND)
         player.status = GameState.STAND
 
@@ -339,9 +345,9 @@ class Blackjack:
             decision = choice([GameDecision.STAND, GameDecision.HIT])
 
         if decision == GameDecision.HIT:
-            self.__hit(player)
+            self.hit_player(player)
         elif decision == GameDecision.STAND:
-            self.__stand(player)
+            self.stand_player(player)
         elif decision == GameDecision.SPLIT:
             self.__split(player)
 
@@ -385,10 +391,35 @@ def get_best_decision(x: dict, n_sims: int):
     return max(x, key=x.get), max(x.values()) / n_sims
 
 
-def simulate_game(player_hand: str, dealer_hand: str, decision: str, quiet: bool = True):
+def simulate_game(
+        player_hand: str,
+        dealer_hand: str,
+        decision: str,
+        basic_strategy: dict = None,
+        quiet: bool = True
+):
     game = Blackjack(player_hands=[Hand(player_hand)], dealer_hand=Hand(dealer_hand))
     if decision == GameDecision.HIT: game.hit()
     if decision == GameDecision.STAND: game.stand()
+    if decision == GameDecision.SPLIT:
+        game.split()
+
+        if dealer_hand == 'T': dealer_hand = 10
+        if dealer_hand == 'A': dealer_hand = 11
+
+        # TODO: I don't like this
+        while not game.is_dealer_turn:
+            if not game.current_player.hand.is_soft_value:
+                opt_decision = basic_strategy[(game.current_player.hand.value, int(dealer_hand))]
+            else:
+                opt_decision = basic_strategy[(game.current_player.hand.soft_value[1], int(dealer_hand))]
+            if opt_decision == GameDecision.HIT:
+                if game.current_player.hand.value == 21: breakpoint()
+                game.hit_player(game.current_player)
+            elif opt_decision == GameDecision.STAND:
+                game.stand_player(game.current_player)
+            game.next_player()
+
     game.stand()
     game.hit_dealer()
 
@@ -405,9 +436,10 @@ def simulate_games_profit(
         player_hand: str,
         dealer_hand: str,
         decision: str,
+        basic_strategy: dict = None,
         quiet: bool = True,
 ):
-    return sum(simulate_game(player_hand, dealer_hand, decision, quiet) for _ in range(n_sims))
+    return sum(simulate_game(player_hand, dealer_hand, decision, basic_strategy, quiet) for _ in range(n_sims))
 
 
 def get_basic_strategy(n_sims: int = 10_000, n_processes: int = None):
@@ -491,6 +523,53 @@ def get_basic_strategy(n_sims: int = 10_000, n_processes: int = None):
 
         best_play[(small_hand, dealer)] = GameDecision.HIT  # best play is obviously HIT
         expected_profit[(small_hand, dealer)] = small_hand_ev
+
+    for player_hand, dealer in product(splittable_hands, dealer_starting_vals):
+        if dealer == 10:
+            dealer_hand = 'T'
+        elif dealer == 11:
+            dealer_hand = 'A'
+        else:
+            dealer_hand = str(dealer)
+        print('Player Hand: {} (Value: {})\tDealer Value: {}....'.format(player_hand, player_hand, dealer), end='')
+        tick = perf_counter()
+        for decision in [GameDecision.HIT, GameDecision.STAND, GameDecision.SPLIT]:
+            if n_processes is not None:
+
+                n_processes = mp.cpu_count() if n_processes == -1 else n_processes
+                n_batch = n_sims // n_processes + 1
+
+                f = partial(
+                    simulate_games_profit,
+                    player_hand=player_hand,
+                    dealer_hand=dealer_hand,
+                    decision=decision,
+                    basic_strategy=best_play,
+                )
+
+                with mp.Pool(n_processes) as pool:
+                    res = pool.map(f, [n_batch] * n_processes)
+                profit = sum(res)
+            else:
+                profit = simulate_games_profit(
+                    n_sims=n_sims,
+                    player_hand=player_hand,
+                    dealer_hand=dealer_hand,
+                    decision=decision,
+                    basic_strategy=best_play,
+                )
+
+            outcomes[(player_hand, dealer)][decision] = profit
+        tock = perf_counter()
+        print(f'Time taken = {tock - tick:.2f}s')
+
+    # TODO: REPEATED
+    best_play = {}
+    expected_profit = {}
+    for hands in outcomes:
+        bp, ev = get_best_decision(outcomes[hands], n_sims=n_sims)
+        best_play[hands] = bp
+        expected_profit[hands] = ev
 
     # Could this be neater?
     # Calculating EV of soft hands
