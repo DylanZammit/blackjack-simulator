@@ -11,6 +11,9 @@ from pprint import pprint
 import pandas as pd
 import numpy as np
 
+pd.set_option('display.max_columns', None)
+pd.set_option('display.max_rows', None)
+
 
 @dataclass
 class GameDecision:
@@ -96,11 +99,11 @@ class Hand:
 
     @property
     def value(self) -> Union[int, tuple[int, int]]:
-        if not self.is_soft_value: return self.hard_value
+        if self.num_aces == 0: return self.hard_value
         min_val = self.hard_value + self.num_aces
         max_val = self.hard_value + self.num_aces - 1 + 11
         if 21 in [min_val, max_val]: return 21
-        if min_val > 21: return 22
+        if min_val > 21: return min_val
         if max_val > 21: return min_val
         return max_val
 
@@ -110,7 +113,7 @@ class Hand:
         min_val = self.hard_value + self.num_aces
         max_val = self.hard_value + self.num_aces - 1 + 11
         if 21 in [min_val, max_val]: return 21
-        if min_val > 21: return 22
+        if min_val > 21: return min_val
         if max_val > 21: return min_val
         return min_val, max_val
 
@@ -417,7 +420,7 @@ def get_basic_strategy(n_sims: int = 10_000, n_processes: int = None):
     dealer_starting_vals = list(np.arange(2, 12))
     outcomes = {k: defaultdict(int) for k in product(player_starting_vals, dealer_starting_vals)}
 
-    for player_val, dealer in product(blackjack + hard_hands, dealer_starting_vals):
+    for player_val, dealer in product(blackjack + hard_hands + soft_hands, dealer_starting_vals):
         tick = perf_counter()
 
         player_hand = player_val
@@ -442,7 +445,7 @@ def get_basic_strategy(n_sims: int = 10_000, n_processes: int = None):
         decisions = []
         if player_val in [21, 'AT']:
             decisions = [GameDecision.STAND]
-        elif 11 <= player_val < 21:
+        elif 'A' in str(player_val) or 11 <= player_val < 21:
             decisions = [GameDecision.HIT, GameDecision.STAND]
 
         for decision in decisions:
@@ -479,9 +482,11 @@ def get_basic_strategy(n_sims: int = 10_000, n_processes: int = None):
         expected_profit[hands] = ev
 
     for small_hand, dealer in product(small_hands[::-1], dealer_starting_vals):
-        vals = list(range(2, 10)) + [10] * 4 + [11]  # TODO: what if A == 1??
-        evs = np.array([expected_profit[(small_hand + h, dealer)] for h in vals])
-        small_hand_ev = np.mean(evs[~np.isnan(evs)])
+        vals = list(range(2, 10)) + [10] * 4
+        ev_1 = expected_profit[(small_hand + 1, dealer)]
+        ev_11 = expected_profit[(small_hand + 11, dealer)]
+        evs = np.array([expected_profit[(small_hand + h, dealer)] for h in vals] + [max([ev_1, ev_11])])
+        small_hand_ev = np.mean(evs)
 
         best_play[(small_hand, dealer)] = GameDecision.HIT  # best play is obviously HIT
         expected_profit[(small_hand, dealer)] = small_hand_ev
@@ -489,23 +494,26 @@ def get_basic_strategy(n_sims: int = 10_000, n_processes: int = None):
     # Could this be neater?
     # Calculating EV of soft hands
     # E[AX] = max(E[11 + X], E[1 + X])
-    for soft_hand, dealer in product(soft_hands, dealer_starting_vals):
-        hand = Hand(soft_hand)
-        hand_val = hand.soft_value
-        if isinstance(hand_val, int):
-            best_play[(soft_hand, dealer)] = best_play[(hand_val, dealer)]
-            expected_profit[(soft_hand, dealer)] = expected_profit[(hand_val, dealer)]
-        elif isinstance(hand_val, tuple):
-            small_hand, big_hand = hand_val
-            big_hand_ev = expected_profit[(big_hand, dealer)]
-            small_hand_ev = expected_profit[(small_hand, dealer)]
-
-            if big_hand_ev > small_hand_ev:
-                best_play[(soft_hand, dealer)] = best_play[(big_hand, dealer)]
-                expected_profit[(soft_hand, dealer)] = big_hand_ev
+    if False:
+        for soft_hand, dealer in product(soft_hands, dealer_starting_vals):
+            hand = Hand(soft_hand)
+            hand_val = hand.soft_value
+            # if isinstance(hand_val, int):
+            if not hand.is_soft_value:
+                best_play[(soft_hand, dealer)] = best_play[(hand_val, dealer)]
+                expected_profit[(soft_hand, dealer)] = expected_profit[(hand_val, dealer)]
             else:
-                best_play[(soft_hand, dealer)] = best_play[(soft_hand, dealer)]
-                expected_profit[(soft_hand, dealer)] = small_hand_ev
+            # elif isinstance(hand_val, tuple):
+                small_hand, big_hand = hand_val
+                big_hand_ev = expected_profit[(big_hand, dealer)]
+                small_hand_ev = expected_profit[(small_hand, dealer)]
+
+                if big_hand_ev > small_hand_ev:
+                    best_play[(soft_hand, dealer)] = best_play[(big_hand, dealer)]
+                    expected_profit[(soft_hand, dealer)] = big_hand_ev
+                else:
+                    best_play[(soft_hand, dealer)] = best_play[(soft_hand, dealer)]
+                    expected_profit[(soft_hand, dealer)] = small_hand_ev
 
     # could this be neater?
     # Calculating EV of splittable hands
@@ -596,7 +604,7 @@ if __name__ == '__main__':
 
     args = parser.parse_args()
 
-    # simulate_hand('75', '3', 100, quiet=False)
+    # simulate_hand('A7', 'A', 10000, quiet=False)
     # simulate_hand('78', 'A', 10000, quiet=False)
 
     if True:
