@@ -71,11 +71,12 @@ class Card:
 
 
 class Hand:
-    def __init__(self, cards: Union[List[Card], str] = None):
+    def __init__(self, cards: Union[List[Card], str] = None, is_split: bool = False):
 
         if cards is None: cards = []
 
         self.cards = [Card(c) if isinstance(c, str) else c for c in cards]
+        self.is_splt = is_split
 
     def __len__(self):
         return len(self.cards)
@@ -139,7 +140,7 @@ class Hand:
 
     @property
     def is_splittable(self) -> bool:
-        return len(self) == 2 and self.cards[0].value == self.cards[1].value
+        return len(self) == 2 and self.cards[0].value == self.cards[1].value and not self.is_splt
 
 
 class Player:
@@ -315,7 +316,7 @@ class Blackjack:
 
         assert player.hand.is_splittable, f'Cannot Split {player.hand}!'
 
-        player.hand = Hand([player.hand.cards[0]])
+        player.hand = Hand([player.hand.cards[0]], is_split=True)
         new_player = Player(name=player.name, hand=deepcopy(player.hand))
 
         self.players.insert(self.player_turn+1, new_player)
@@ -498,12 +499,10 @@ def get_basic_strategy(n_sims: int = 10_000, n_processes: int = None):
         for soft_hand, dealer in product(soft_hands, dealer_starting_vals):
             hand = Hand(soft_hand)
             hand_val = hand.soft_value
-            # if isinstance(hand_val, int):
             if not hand.is_soft_value:
                 best_play[(soft_hand, dealer)] = best_play[(hand_val, dealer)]
                 expected_profit[(soft_hand, dealer)] = expected_profit[(hand_val, dealer)]
             else:
-            # elif isinstance(hand_val, tuple):
                 small_hand, big_hand = hand_val
                 big_hand_ev = expected_profit[(big_hand, dealer)]
                 small_hand_ev = expected_profit[(small_hand, dealer)]
@@ -518,41 +517,42 @@ def get_basic_strategy(n_sims: int = 10_000, n_processes: int = None):
     # could this be neater?
     # Calculating EV of splittable hands
     # E[XX] = max(E[X + X], 2 * E[X]) = max(E[X + X], 2 * Sum_[i in A2..JQK](E[X + i])
-    for splittable_hand, dealer in product(splittable_hands, dealer_starting_vals):
-        c = splittable_hand[0]
-        if c == 'A': card_val = 6
-        elif c == 'T': card_val = 10
-        else: card_val = int(c)
+    if False:
+        for splittable_hand, dealer in product(splittable_hands, dealer_starting_vals):
+            c = splittable_hand[0]
+            if c == 'A': card_val = 6
+            elif c == 'T': card_val = 10
+            else: card_val = int(c)
 
-        hand_val = card_val * 2
+            hand_val = card_val * 2
 
-        no_split_ev = expected_profit[(hand_val, dealer)]
-        no_split_bp = best_play[(hand_val, dealer)]
+            no_split_ev = expected_profit[(hand_val, dealer)]
+            no_split_bp = best_play[(hand_val, dealer)]
 
-        if c == 'A':
-            vals = list(range(2, 10))  # + [10] * 4
-            evs = np.array([expected_profit[('A' + str(h), dealer)] for h in vals])
-            for _ in range(4):
-                evs = np.insert(evs, 0, expected_profit[(21, dealer)])  # split AT NOT BJ
-            evs = np.insert(evs, 0, expected_profit[(12, dealer)])  # handle AA separately
-        else:
-            vals = list(range(2, 10)) + [10] * 4
-            evs = np.array([expected_profit[(card_val + h, dealer)] for h in vals])
-
-            # handle AT separately
-            if card_val == 10:
-                evs = np.insert(evs, 0, expected_profit[(21, dealer)])  # split AT NOT BJ
+            if c == 'A':
+                vals = list(range(2, 10))  # + [10] * 4
+                evs = np.array([expected_profit[('A' + str(h), dealer)] for h in vals])
+                for _ in range(4):
+                    evs = np.insert(evs, 0, expected_profit[(21, dealer)])  # split AT NOT BJ
+                evs = np.insert(evs, 0, expected_profit[(12, dealer)])  # handle AA separately
             else:
-                evs = np.insert(evs, 0, expected_profit[(f'A{card_val}', dealer)])
+                vals = list(range(2, 10)) + [10] * 4
+                evs = np.array([expected_profit[(card_val + h, dealer)] for h in vals])
 
-        split_hand_ev = 2 * np.mean(evs[~np.isnan(evs)])
+                # handle AT separately
+                if card_val == 10:
+                    evs = np.insert(evs, 0, expected_profit[(21, dealer)])  # split AT NOT BJ
+                else:
+                    evs = np.insert(evs, 0, expected_profit[(f'A{card_val}', dealer)])
 
-        if split_hand_ev > no_split_ev:
-            best_play[(splittable_hand, dealer)] = GameDecision.SPLIT
-            expected_profit[(splittable_hand, dealer)] = split_hand_ev
-        else:
-            best_play[(splittable_hand, dealer)] = no_split_bp
-            expected_profit[(splittable_hand, dealer)] = no_split_ev
+            split_hand_ev = 2 * np.mean(evs[~np.isnan(evs)])
+
+            if split_hand_ev > no_split_ev:
+                best_play[(splittable_hand, dealer)] = GameDecision.SPLIT
+                expected_profit[(splittable_hand, dealer)] = split_hand_ev
+            else:
+                best_play[(splittable_hand, dealer)] = no_split_bp
+                expected_profit[(splittable_hand, dealer)] = no_split_ev
 
     df_best_profit = pd.DataFrame(expected_profit.values(), index=list(expected_profit.keys()))
     df_best_profit.index = pd.MultiIndex.from_tuples(df_best_profit.index, names=['player', 'dealer'])
