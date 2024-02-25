@@ -588,7 +588,6 @@ def get_basic_strategy(n_sims: int = 10_000, n_processes: int = None):
 
     df_best_profit = pd.DataFrame(expected_profit.values(), index=list(expected_profit.keys()))
     df_best_profit.index = pd.MultiIndex.from_tuples(df_best_profit.index, names=['player', 'dealer'])
-    df_best_profit = df_best_profit.unstack().replace({1: GameDecision.HIT, 0: GameDecision.STAND})
 
     df_best_play = pd.DataFrame(best_play.values(), index=list(best_play.keys()))
     df_best_play.index = pd.MultiIndex.from_tuples(df_best_play.index, names=['player', 'dealer'])
