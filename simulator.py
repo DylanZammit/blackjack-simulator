@@ -15,6 +15,19 @@ pd.set_option('display.max_columns', None)
 pd.set_option('display.max_rows', None)
 
 
+def card2rank(c):
+    if 2 <= c <= 9: return str(c)
+    if c == 1 or c == 11: return 'A'
+    if c == 10: return 'T'
+
+
+count_2combinations = {
+    i: ['{}{}'.format(card2rank(j), card2rank(i-j))
+        for j in range(2, min((i-1)//2+1, 10)) if i-j != j and i-j < 11]
+    for i in range(5, 20)
+}
+
+
 @dataclass
 class GameDecision:
     SPLIT: str = 'Split'
@@ -87,19 +100,14 @@ class Hand:
         self.cards.append(card)
 
     def __eq__(self, other):
-        if self.is_blackjack and other.is_blackjack:
-            return True
-
-        if not self.is_blackjack and not other.is_blackjack and self.value == other.value:
-            return True
-
-        return False
+        return self.is_blackjack and other.is_blackjack or \
+            not self.is_blackjack and not other.is_blackjack and self.value == other.value
 
     def __gt__(self, other):
         return self.value > other.value or self.is_blackjack and not other.is_blackjack
 
     @property
-    def value(self) -> Union[int, tuple[int, int]]:
+    def value(self) -> int:
         if self.num_aces == 0: return self.hard_value
         min_val = self.hard_value + self.num_aces
         max_val = self.hard_value + self.num_aces - 1 + 11
@@ -136,7 +144,7 @@ class Hand:
 
     @property
     def is_blackjack(self) -> bool:
-        return len(self) == 2 and self.value == 21  and not self.is_split
+        return len(self) == 2 and self.value == 21 and not self.is_split
 
     @property
     def is_splittable(self) -> bool:
@@ -144,6 +152,9 @@ class Hand:
 
     @property
     def pretty_val(self):
+        return ''.join([c.rank for c in self.cards])
+
+    def __repr__(self):
         return ''.join([c.rank for c in self.cards])
 
 
@@ -392,14 +403,33 @@ def get_best_decision(x: dict, n_sims: int):
 
 
 def simulate_game(
-        player_hand: str,
+        player_hand: str | int,  # only pass int if you have the value. Should change this
         dealer_hand: str,
         decision: str,
         basic_strategy: dict = None,
-        quiet: bool = True
+        quiet: bool = True,
+        n_packs: int = 6,
 ):
-    game = Blackjack(player_hands=[Hand(player_hand)], dealer_hand=Hand(dealer_hand))
-    if decision == GameDecision.HIT: game.hit()
+
+    if isinstance(player_hand, int):
+        player_hand = choice(count_2combinations[player_hand])
+        if player_hand == 20: player_hand = '884'
+        elif player_hand == 21: player_hand = '993'
+    else:
+        player_hand = str(player_hand)
+
+    game = Blackjack(
+        player_hands=[Hand(player_hand)],
+        dealer_hand=Hand(dealer_hand),
+        n_packs=n_packs,
+    )
+
+    while game.current_player.hand.value < 11 and not game.current_player.hand.is_splittable:
+        game.hit()
+
+    player_val = game.current_player.hand.value
+
+    if decision == GameDecision.HIT and player_val != 21: game.hit()
     if decision == GameDecision.STAND: game.stand()
     if decision == GameDecision.SPLIT:
         game.split()
@@ -414,7 +444,6 @@ def simulate_game(
             else:
                 opt_decision = basic_strategy[(game.current_player.hand.soft_value[1], int(dealer_hand))]
             if opt_decision == GameDecision.HIT:
-                if game.current_player.hand.value == 21: breakpoint()
                 game.hit_player(game.current_player)
             elif opt_decision == GameDecision.STAND:
                 game.stand_player(game.current_player)
@@ -445,8 +474,10 @@ def simulate_games_profit(
 def get_basic_strategy(n_sims: int = 10_000, n_processes: int = None):
     splittable_hands = [f'{c}{c}' for c in 'A23456789T']
     soft_hands = [f'A{c}' for c in '23456789']
-    small_hands = list(np.arange(3, 11))
-    hard_hands = list(np.arange(11, 22))
+    small_hands = []
+    hard_hands = list(np.arange(3, 22))
+    # small_hands = list(np.arange(3, 5))
+    # hard_hands = list(np.arange(11, 22))
     blackjack = ['AT']
 
     player_starting_vals = small_hands + hard_hands + splittable_hands + soft_hands + blackjack
@@ -458,11 +489,8 @@ def get_basic_strategy(n_sims: int = 10_000, n_processes: int = None):
 
         player_hand = player_val
         if not isinstance(player_val, str):
-            c1 = player_val // 2 + 1
-            c2 = player_val // 2 - 1 if player_val % 2 == 0 else player_val // 2
-            if c1 == 10: c1 = 'T'
-            if c2 == 10: c2 = 'T'
-            player_hand = f'{c1}{c2}'
+            if player_val in count_2combinations:
+                player_hand = choice(count_2combinations[player_val])
 
             if player_val == 20: player_hand = '884'
             if player_val == 21: player_hand = '993'
@@ -478,7 +506,7 @@ def get_basic_strategy(n_sims: int = 10_000, n_processes: int = None):
         decisions = []
         if player_val in [21, 'AT']:
             decisions = [GameDecision.STAND]
-        elif 'A' in str(player_val) or 11 <= player_val < 21:
+        elif 'A' in str(player_val) or player_val < 21:
             decisions = [GameDecision.HIT, GameDecision.STAND]
 
         for decision in decisions:
@@ -514,15 +542,16 @@ def get_basic_strategy(n_sims: int = 10_000, n_processes: int = None):
         best_play[hands] = bp
         expected_profit[hands] = ev
 
-    for small_hand, dealer in product(small_hands[::-1], dealer_starting_vals):
-        vals = list(range(2, 10)) + [10] * 4
-        ev_1 = expected_profit[(small_hand + 1, dealer)]
-        ev_11 = expected_profit[(small_hand + 11, dealer)]
-        evs = np.array([expected_profit[(small_hand + h, dealer)] for h in vals] + [max([ev_1, ev_11])])
-        small_hand_ev = np.mean(evs)
+    if False:
+        for small_hand, dealer in product(small_hands[::-1], dealer_starting_vals):
+            vals = list(range(2, 10)) + [10] * 4
+            ev_1 = expected_profit[(small_hand + 1, dealer)]
+            ev_11 = expected_profit[(small_hand + 11, dealer)]
+            evs = np.array([expected_profit[(small_hand + h, dealer)] for h in vals] + [max([ev_1, ev_11])])
+            small_hand_ev = np.mean(evs)
 
-        best_play[(small_hand, dealer)] = GameDecision.HIT  # best play is obviously HIT
-        expected_profit[(small_hand, dealer)] = small_hand_ev
+            best_play[(small_hand, dealer)] = GameDecision.HIT  # best play is obviously HIT
+            expected_profit[(small_hand, dealer)] = small_hand_ev
 
     for player_hand, dealer in product(splittable_hands, dealer_starting_vals):
         if dealer == 10:
@@ -644,31 +673,27 @@ def get_basic_strategy(n_sims: int = 10_000, n_processes: int = None):
     return df_best_play, df_best_profit
 
 
-def simulate_hand(players: str, dealer: str, n_sims=10_000, quiet: bool = True):
+def simulate_hand(players: str | int, dealer: str, n_sims=10_000, quiet: bool = True):
 
-    print('*'*10 + GameDecision.HIT + '*'*10)
+    decisions = [GameDecision.STAND, GameDecision.HIT]
+    if isinstance(players, str) and len(players) == 2:
+        decisions.append(GameDecision.SPLIT)
 
-    hit_profit = simulate_games_profit(
-        n_sims=n_sims,
-        player_hand=players,
-        dealer_hand=dealer,
-        decision=GameDecision.HIT,
-        quiet=quiet,
-    )
+    decision_profit = {}
+    for decision in decisions:
+        print('*'*10 + decision + '*'*10)
 
-    print('*'*10 + GameDecision.STAND + '*'*10)
+        decision_profit[decision] = simulate_games_profit(
+            n_sims=n_sims,
+            player_hand=players,
+            dealer_hand=dealer,
+            decision=decision,
+            quiet=quiet,
+        )
 
-    stand_profit = simulate_games_profit(
-        n_sims=n_sims,
-        player_hand=players,
-        dealer_hand=dealer,
-        decision=GameDecision.STAND,
-        quiet=quiet,
-    )
-
-    print('Expected Profit')
-    print(GameDecision.HIT, hit_profit / n_sims)
-    print(GameDecision.STAND, stand_profit / n_sims)
+        print('Expected Profit')
+        print(decision, decision_profit[decision] / n_sims)
+        print('% {} Wins: {:.2f}%'.format(decision, (1 + decision_profit[decision] / n_sims) / 2 * 100))
 
 
 if __name__ == '__main__':
@@ -683,8 +708,8 @@ if __name__ == '__main__':
 
     args = parser.parse_args()
 
-    # simulate_hand('A7', 'A', 10000, quiet=False)
-    # simulate_hand('78', 'A', 10000, quiet=False)
+    # simulate_hand('22', '9', 10000, quiet=False)
+    # simulate_hand(16, 'T', 100000, quiet=False)
 
     if True:
         # run parallel not beneficial for < 10_000 n_sims
