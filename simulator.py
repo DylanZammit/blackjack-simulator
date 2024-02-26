@@ -10,9 +10,12 @@ from copy import deepcopy
 from pprint import pprint
 import pandas as pd
 import numpy as np
+import os
 
 pd.set_option('display.max_columns', None)
 pd.set_option('display.max_rows', None)
+
+BASE_PATH = os.path.dirname(os.path.abspath(__file__))
 
 
 def card2rank(c):
@@ -33,6 +36,7 @@ class GameDecision:
     SPLIT: str = 'Split'
     STAND: str = 'Stand'
     HIT: str = 'Hit'
+    DOUBLE: str = 'Double'
 
 
 @dataclass
@@ -163,11 +167,14 @@ class Player:
             self,
             name: Union[str, int],
             hand: Hand = None,
+            stake: int = 1
     ):
         self.name = name
         self.hand = hand if hand is not None else Hand()
         self.status = GameState.LIVE
         self.decision_hist = []
+        self.stake = stake
+        self.is_doubled = False
 
     def deal_card(self, card: Card) -> None:
         self.hand.add_card(card)
@@ -189,10 +196,10 @@ class Player:
 
     @property
     def profit(self) -> float:
-        if self.status == GameState.WON and self.is_blackjack: return 1.5
-        if self.status == GameState.WON: return 1
+        if self.status == GameState.WON and self.is_blackjack: return 1.5 * self.stake
+        if self.status == GameState.WON: return self.stake
         if self.status == GameState.DRAW: return 0
-        if self.status == GameState.LOST: return -1
+        if self.status == GameState.LOST: return -self.stake
         return 0
 
     def __repr__(self):
@@ -258,9 +265,9 @@ class Blackjack:
         player = None
         while is_finished:
             player = self.players[self.player_turn % self.n_players]
-            is_finished = player.is_finished
+            is_finished = player.is_finished or player.status == GameState.STAND
             self.player_turn += 1
-        self.current_player = player
+        self.current_player = player  # self.players[self.player_turn % self.n_players]
         return player
 
     def draw_card(self):
@@ -304,6 +311,17 @@ class Blackjack:
     def hit(self) -> None:
         return self.hit_player(self.next_player())
 
+    def double_player(self, player: Player = None):
+        assert player.hand.value != 21, f'Cannot double on {player.hand}!'
+        player.stake *= 2
+        player.is_doubled = True
+        player.log_decision(GameDecision.DOUBLE)
+        player.deal_card(next(self.draw))
+        player.status = GameState.LOST if player.hand.value > 21 else GameState.STAND
+
+    def double(self) -> None:
+        self.double_player(self.next_player())
+
     def hit_player(self, player: Player = None) -> None:
         if player is None: return
         assert player.hand.value != 21, f'Cannot hit on {player.hand}!'
@@ -318,7 +336,7 @@ class Blackjack:
 
     def stand(self) -> None:
         if self.is_dealer_turn: return
-        return self.stand_player(self.next_player())
+        self.stand_player(self.next_player())
 
     def stand_player(self, player: Player) -> None:
         player.log_decision(GameDecision.STAND)
@@ -351,9 +369,9 @@ class Blackjack:
         elif player.hand.value == 21:
             decision = GameDecision.STAND
         elif player.hand.is_splittable:
-            decision = choice([GameDecision.STAND, GameDecision.HIT, GameDecision.SPLIT])
+            decision = choice([GameDecision.STAND, GameDecision.HIT, GameDecision.SPLIT, GameDecision.DOUBLE])
         else:
-            decision = choice([GameDecision.STAND, GameDecision.HIT])
+            decision = choice([GameDecision.STAND, GameDecision.HIT, GameDecision.DOUBLE])
 
         if decision == GameDecision.HIT:
             self.hit_player(player)
@@ -361,6 +379,8 @@ class Blackjack:
             self.stand_player(player)
         elif decision == GameDecision.SPLIT:
             self.split_player(player)
+        elif decision == GameDecision.DOUBLE:
+            self.double_player(player)
 
         return decision
 
@@ -428,10 +448,9 @@ def simulate_game(
     while game.current_player.hand.value < 11 and not game.current_player.hand.is_splittable:
         game.hit()
 
-    player_val = game.current_player.hand.value
-
-    if decision == GameDecision.HIT and player_val != 21: game.hit()
+    if decision == GameDecision.HIT and game.current_player.hand.value != 21: game.hit()
     if decision == GameDecision.STAND: game.stand()
+    if decision == GameDecision.DOUBLE and game.current_player.hand.value != 21: game.double()
     if decision == GameDecision.SPLIT:
         game.split()
 
@@ -440,30 +459,33 @@ def simulate_game(
 
         # TODO: I don't like this
         while not game.is_dealer_turn:
+            player = game.next_player()
 
-            if game.current_player.hand.is_splittable:
+            if player.hand.is_splittable:
                 opt_decision = GameDecision.SPLIT
             else:
-                opt_decision = basic_strategy[(game.current_player.hand.value, int(dealer_hand))]
+                opt_decision = basic_strategy[(player.hand.value, int(dealer_hand))]
 
             if opt_decision == GameDecision.HIT:
-                game.hit_player(game.current_player)
+                game.hit_player(player)
             elif opt_decision == GameDecision.STAND:
-                game.stand_player(game.current_player)
+                game.stand_player(player)
             elif opt_decision == GameDecision.SPLIT:
-                game.split_player(game.current_player)
-
-            game.next_player()
+                game.split_player(player)
+            elif opt_decision == GameDecision.DOUBLE:
+                game.double_player(player)
 
     game.stand()
     game.hit_dealer()
 
-    if not quiet: print(game)
-
     players_profit = game.get_players_profit()
 
-    player = game.players[0]
-    return players_profit[player.name]
+    if not quiet:
+        print(game)
+        print(players_profit)
+
+    # if decision == GameDecision.SPLIT: breakpoint()
+    return players_profit[game.current_player.name]
 
 
 def simulate_games_profit(
@@ -505,7 +527,7 @@ def get_basic_strategy(n_sims: int = 10_000, n_processes: int = None):
         if player_hand in [21, 'AT']:
             decisions = [GameDecision.STAND]
         elif 'A' in str(player_hand) or player_hand < 21:
-            decisions = [GameDecision.HIT, GameDecision.STAND]
+            decisions = [GameDecision.HIT, GameDecision.STAND, GameDecision.DOUBLE]
 
         for decision in decisions:
 
@@ -514,7 +536,13 @@ def get_basic_strategy(n_sims: int = 10_000, n_processes: int = None):
                 n_processes = mp.cpu_count() if n_processes == -1 else n_processes
                 n_batch = n_sims // n_processes + 1
 
-                f = partial(simulate_games_profit, player_hand=player_val, dealer_hand=dealer_hand, decision=decision)
+                f = partial(
+                    simulate_games_profit,
+                    player_hand=player_val,
+                    dealer_hand=dealer_hand,
+                    decision=decision
+                )
+
                 with mp.Pool(n_processes) as pool:
                     res = pool.map(f, [n_batch] * n_processes)
                 profit = sum(res)
@@ -530,8 +558,6 @@ def get_basic_strategy(n_sims: int = 10_000, n_processes: int = None):
 
         tock = perf_counter()
         print(f'Time taken = {tock - tick:.2f}s')
-
-    pprint(outcomes)
 
     best_play = {}
     expected_profit = {}
@@ -549,7 +575,7 @@ def get_basic_strategy(n_sims: int = 10_000, n_processes: int = None):
             dealer_hand = str(dealer)
         print('Player Value: {} (Value: {})\tDealer Value: {}....'.format(player_val, player_val, dealer), end='')
         tick = perf_counter()
-        for decision in [GameDecision.HIT, GameDecision.STAND, GameDecision.SPLIT]:
+        for decision in [GameDecision.HIT, GameDecision.STAND, GameDecision.SPLIT, GameDecision.DOUBLE]:
             if n_processes is not None:
 
                 n_processes = mp.cpu_count() if n_processes == -1 else n_processes
@@ -579,6 +605,8 @@ def get_basic_strategy(n_sims: int = 10_000, n_processes: int = None):
         tock = perf_counter()
         print(f'Time taken = {tock - tick:.2f}s')
 
+    pprint(outcomes)
+
     # TODO: REPEATED
     best_play = {}
     expected_profit = {}
@@ -595,12 +623,18 @@ def get_basic_strategy(n_sims: int = 10_000, n_processes: int = None):
     df_best_play.index = pd.MultiIndex.from_tuples(df_best_play.index, names=['player', 'dealer'])
     df_best_play = df_best_play.unstack().replace({1: GameDecision.HIT, 0: GameDecision.STAND})
 
-    return df_best_play, df_best_profit
+    return df_best_play[0], df_best_profit[0]
 
 
-def simulate_hand(players: str | int, dealer: str, n_sims=10_000, quiet: bool = True):
+def simulate_hand(
+        players: str | int,
+        dealer: str,
+        n_sims=10_000,
+        quiet: bool = True,
+        basic_strategy: dict = None,
+):
 
-    decisions = [GameDecision.STAND, GameDecision.HIT]
+    decisions = [GameDecision.STAND, GameDecision.HIT, GameDecision.DOUBLE]
     if isinstance(players, str) and len(players) == 2:
         decisions.append(GameDecision.SPLIT)
 
@@ -614,6 +648,7 @@ def simulate_hand(players: str | int, dealer: str, n_sims=10_000, quiet: bool = 
             dealer_hand=dealer,
             decision=decision,
             quiet=quiet,
+            basic_strategy=basic_strategy,
         )
 
         print('Expected Profit')
@@ -629,16 +664,40 @@ if __name__ == '__main__':
     parser.add_argument("-s", "--samples", type=int, default=1_000,
                         help="Number of samples per player/dealer hand combination [def: 10_000]")
     parser.add_argument("-p", "--processes", type=int, default=None,
-                        help="Number of processes to use (-1 for all) [def: no parallel]")
+                        help="Number of processes to use (-1 for all). "
+                             "NOTE: not beneficial for < 10_000 n_sims [def: no parallel]")
+    parser.add_argument("-l", "--load", type=str,
+                        help="Path to CSV containing basic strategy to load")
+    parser.add_argument("-g", "--generate", action='store_true',
+                        help="Generate basic strategy and save")
 
     args = parser.parse_args()
 
     # simulate_hand('22', '9', 10000, quiet=False)
     # simulate_hand(16, 'T', 100000, quiet=False)
 
-    if True:
-        # run parallel not beneficial for < 10_000 n_sims
-        df_decision, df_profit = get_basic_strategy(n_sims=args.samples, n_processes=args.processes)
+    if args.load:
+        import json
+        df = pd.read_csv(args.load, index_col=0)
+        json_bs = json.loads(df.to_json())
+        bs = {
+            (player, dealer): decision
+            for dealer, player_decision in json_bs.items()
+            for player, decision in player_decision.items()
+            }
+        print(df)
+        simulate_hand('22', '2', 1000, quiet=False, basic_strategy=bs)
+
+    if args.generate:
+
+        df_decision, df_profit = get_basic_strategy(
+            n_sims=args.samples,
+            n_processes=args.processes,
+        )
+
+        df_decision.to_csv(os.path.join(BASE_PATH, 'basic_strategy.csv'))
+        df_profit.to_csv(os.path.join(BASE_PATH, 'basic_strategy_profit.csv'))
+
         pprint(df_decision)
         pprint(df_profit)
         print(df_profit.mean().mean())
