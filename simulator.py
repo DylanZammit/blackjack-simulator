@@ -165,6 +165,11 @@ class Hand:
     def pretty_val(self):
         return ''.join([c.rank for c in self.cards])
 
+    def get_string_rep(self):
+        if self.is_soft_value:
+            return 'A{}'.format(self.hard_value + self.num_aces - 1)
+        return str(self)
+
     def __repr__(self):
         return ''.join([c.rank for c in self.cards])
 
@@ -258,6 +263,12 @@ class Blackjack:
         else:
             self.__setup()
 
+        if self.dealer.is_blackjack:
+            for player in self.players:
+                self.stand_player(player)
+
+            self.hit_dealer()
+
         self.player_turn = 0
         self.current_player = self.players[0]
 
@@ -320,6 +331,7 @@ class Blackjack:
 
     def double_player(self, player: Player = None):
         assert player.hand.value != 21, f'Cannot double on {player.hand}!'
+        assert len(player.hand) == 2, f'Can only double on starting hands, current hand: {player.hand}'
         player.stake *= 2
         player.is_doubled = True
         player.log_decision(GameDecision.DOUBLE)
@@ -346,6 +358,7 @@ class Blackjack:
         self.stand_player(self.next_player())
 
     def stand_player(self, player: Player) -> None:
+        if player.is_finished: return
         player.log_decision(GameDecision.STAND)
         player.status = GameState.STAND
 
@@ -434,6 +447,7 @@ def simulate_game(
         dealer_hand: int,
         decision: str,
         basic_strategy: dict = None,
+        expected_profit: dict = None,
         quiet: bool = True,
         n_packs: int = 6,
 ):
@@ -459,32 +473,54 @@ def simulate_game(
         n_packs=n_packs,
     )
 
-    if decision == GameDecision.HIT: game.hit()
-    if decision == GameDecision.STAND: game.stand()
-    if decision == GameDecision.DOUBLE: game.double()
-    if decision == GameDecision.SPLIT: game.split()
+    if not game.is_finished:
 
-    # rest can be in a separate method
-    while not game.is_dealer_turn:
-        player = game.next_player()
-        opt_decision = basic_strategy[(player.hand.value, int(dealer_hand))]
+        if decision == GameDecision.HIT: game.hit()
+        if decision == GameDecision.STAND: game.stand()
+        if decision == GameDecision.DOUBLE: game.double()
+        if decision == GameDecision.SPLIT: game.split()
 
-        if opt_decision == GameDecision.HIT:
-            game.hit_player(player)
-        elif opt_decision == GameDecision.STAND:
-            game.stand_player(player)
-        elif opt_decision == GameDecision.SPLIT:
-            game.split_player(player)
-        elif opt_decision == GameDecision.DOUBLE:
-            game.double_player(player)
+        # rest can be in a separate method
+        while not game.is_dealer_turn:
+            player = game.next_player()
 
-    game.hit_dealer()
+            if isinstance(player.hand.soft_value, tuple):
+                # Check whether to consider low or high soft value decision based on EV
+                min_val, max_val = player.hand.soft_value
+
+                ev_min = expected_profit[(min_val, dealer_hand)]
+                ev_max = expected_profit[(max_val, dealer_hand)]
+
+                val = min_val if ev_min > ev_max else max_val
+                opt_decision = basic_strategy[(val, dealer_hand)]
+            elif decision == GameDecision.SPLIT and player.hand.get_string_rep() == player_hand:
+                # Always resplit if you think it is optimal
+                opt_decision = GameDecision.SPLIT
+            else:
+                opt_decision = basic_strategy[(player.hand.value, dealer_hand)]
+
+            # Can only double on first two cards. Hit otherwise
+            if opt_decision == GameDecision.DOUBLE and len(player.hand) != 2:
+                opt_decision = GameDecision.HIT
+
+            if opt_decision == GameDecision.HIT:
+                game.hit_player(player)
+            elif opt_decision == GameDecision.STAND:
+                game.stand_player(player)
+            elif opt_decision == GameDecision.SPLIT:
+                game.split_player(player)
+            elif opt_decision == GameDecision.DOUBLE:
+                game.double_player(player)
+
+        game.hit_dealer()
 
     players_profit = game.get_players_profit()
 
     if not quiet:
         print(game)
         print(players_profit)
+        for player in game.players:
+            print(f'Player {player.name}:', player.decision_hist)
 
     return players_profit[game.current_player.name]
 
@@ -495,15 +531,22 @@ def simulate_games_profit(
         dealer_hand: int,
         decision: str,
         basic_strategy: dict = None,
+        expected_profit: dict = None,
         quiet: bool = True,
 ):
-    return sum(simulate_game(player_hand, dealer_hand, decision, basic_strategy, quiet) for _ in range(n_sims))
+    return sum(simulate_game(
+        player_hand,
+        dealer_hand,
+        decision,
+        basic_strategy,
+        expected_profit,
+        quiet) for _ in range(n_sims))
 
 
 def get_basic_strategy(n_sims: int = 10_000, n_processes: int = None):
     splittable_hands = [f'{c}{c}' for c in 'A23456789T']
     soft_hands = [f'A{c}' for c in '23456789']
-    hard_hands = list([int(x) for x in np.arange(21, 2, -1)])
+    hard_hands = list([int(x) for x in np.arange(21, 1, -1)])
     blackjack = ['AT']
 
     player_starting_vals = blackjack + hard_hands + soft_hands + splittable_hands
@@ -525,37 +568,35 @@ def get_basic_strategy(n_sims: int = 10_000, n_processes: int = None):
             decisions = [GameDecision.HIT, GameDecision.STAND, GameDecision.SPLIT, GameDecision.DOUBLE]
         elif player_hand in [21, 'AT']:
             decisions = [GameDecision.STAND]
-        elif 'A' in str(player_hand) or 11 <= player_hand < 21:
+        elif 'A' in str(player_hand) or 11 <= player_hand < 20:
             decisions = [GameDecision.HIT, GameDecision.STAND, GameDecision.DOUBLE]
-        elif player_hand < 11:
+        elif 5 <= player_hand < 11:
             decisions = [GameDecision.HIT, GameDecision.DOUBLE]
+        elif player_hand == 20 or player_hand < 5:
+            decisions = [GameDecision.HIT, GameDecision.STAND]
 
         for decision in decisions:
+
+            simulate_games_profit_partial = partial(
+                simulate_games_profit,
+                player_hand=player_val,
+                dealer_hand=dealer,
+                decision=decision,
+                basic_strategy=best_play,
+                expected_profit=expected_profit,
+            )
 
             if n_processes is not None:
 
                 n_processes = mp.cpu_count() if n_processes == -1 else n_processes
                 n_batch = n_sims // n_processes + 1
 
-                f = partial(
-                    simulate_games_profit,
-                    player_hand=player_val,
-                    dealer_hand=dealer,
-                    decision=decision,
-                    basic_strategy=best_play,
-                )
-
                 with mp.Pool(n_processes) as pool:
-                    res = pool.map(f, [n_batch] * n_processes)
+                    res = pool.map(simulate_games_profit_partial, [n_batch] * n_processes)
+
                 profit = sum(res)
             else:
-                profit = simulate_games_profit(
-                    n_sims=n_sims,
-                    player_hand=player_val,
-                    dealer_hand=dealer,
-                    decision=decision,
-                    basic_strategy=best_play,
-                )
+                profit = simulate_games_profit_partial(n_sims=n_sims)
 
             outcomes[(player_hand, dealer)][decision] = profit
         bp, ev = get_best_decision(outcomes[(player_hand, dealer)], n_sims=n_sims)
@@ -582,9 +623,10 @@ def get_basic_strategy(n_sims: int = 10_000, n_processes: int = None):
 def simulate_hand(
         players: str | int,
         dealer: int,
-        n_sims=10_000,
+        n_sims: int = 10_000,
         quiet: bool = True,
         basic_strategy: dict = None,
+        expected_profit: dict = None,
 ):
 
     decisions = [GameDecision.STAND, GameDecision.HIT, GameDecision.DOUBLE]
@@ -593,7 +635,7 @@ def simulate_hand(
 
     decision_profit = {}
     for decision in decisions:
-        print('*'*10 + decision + '*'*10)
+        print('*'*30 + decision + '*'*30)
 
         decision_profit[decision] = simulate_games_profit(
             n_sims=n_sims,
@@ -602,6 +644,7 @@ def simulate_hand(
             decision=decision,
             quiet=quiet,
             basic_strategy=basic_strategy,
+            expected_profit=expected_profit,
         )
 
         print('Expected Profit')
@@ -619,25 +662,38 @@ if __name__ == '__main__':
     parser.add_argument("-p", "--processes", type=int, default=None,
                         help="Number of processes to use (-1 for all). "
                              "NOTE: not beneficial for < 10_000 n_sims [def: no parallel]")
-    parser.add_argument("-l", "--load", type=str,
+    parser.add_argument("-bs", "--basic_strategy", type=str,
                         help="Path to CSV containing basic strategy to load")
+    parser.add_argument("-ev", "--expected_value", type=str,
+                        help="Path to CSV containing expected_value to load")
     parser.add_argument("-g", "--generate", action='store_true',
                         help="Generate basic strategy and save")
 
     args = parser.parse_args()
 
-
-    if args.load:
+    if args.basic_strategy and args.expected_value:
         import json
-        df = pd.read_csv(args.load, index_col=0)
-        json_bs = json.loads(df.to_json())
+        df_bs = pd.read_csv(args.basic_strategy, index_col=0)
+        df_ev = pd.read_csv(args.expected_value, index_col=0)
+        json_bs = json.loads(df_bs.to_json())
+        json_ev = json.loads(df_ev.to_json())
+
         bs = {
             (int(player) if player.isnumeric() else player, int(dealer)): decision
             for dealer, player_decision in json_bs.items()
             for player, decision in player_decision.items()
-            }
-        print(df)
-        simulate_hand('44', 6, 1000, quiet=True, basic_strategy=bs)
+        }
+
+        ev = {
+            (int(player) if player.isnumeric() else player, int(dealer)): decision
+            for dealer, player_decision in json_ev.items()
+            for player, decision in player_decision.items()
+        }
+
+        print(df_bs)
+        print(df_ev)
+        simulate_hand('22', 2, 1000, quiet=False, basic_strategy=bs, expected_profit=ev)
+        simulate_hand('22', 2, 10000, quiet=True, basic_strategy=bs, expected_profit=ev)
 
     if args.samples:
 
