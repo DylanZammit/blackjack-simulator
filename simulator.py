@@ -1,443 +1,28 @@
+from utils import GameDecision, count_2combinations, DATA_PATH
 from collections import defaultdict
-from random import choice, shuffle
-from dataclasses import dataclass
-from typing import Union, List
 from itertools import product
 from functools import partial
 from time import perf_counter
 import multiprocessing as mp
-from copy import deepcopy
 from pprint import pprint
+from random import choice
+
+from game import Blackjack
+from hand import Hand
+
 import pandas as pd
 import numpy as np
+import json
 import os
+
 
 pd.set_option('display.max_columns', None)
 pd.set_option('display.max_rows', None)
 
-BASE_PATH = os.path.dirname(os.path.abspath(__file__))
-
-
-def card2rank(c):
-    if 2 <= c <= 9: return str(c)
-    if c == 1 or c == 11: return 'A'
-    if c == 10: return 'T'
-
-
-count_2combinations = {
-    i: ['{}{}'.format(card2rank(j), card2rank(i-j))
-        for j in range(2, min((i-1)//2+1, 10)) if i-j != j and i-j < 11]
-    for i in range(5, 20)
-}
-
-
-@dataclass
-class GameDecision:
-    SPLIT: str = 'Split'
-    STAND: str = 'Stand'
-    HIT: str = 'Hit'
-    DOUBLE: str = 'Dbl'
-
-
-@dataclass
-class GameState:
-    WON: str = 'WON'
-    LOST: str = 'LOST'
-    DRAW: str = 'DRAW'
-    LIVE: str = 'LIVE'
-    STAND: str = 'STAND'
-
-
-class Card:
-
-    deck = 'A23456789TJQK'
-
-    def __init__(self, rank: str):
-        if rank == '10':
-            rank = 'T'
-        elif rank in ['1', '11']:
-            rank = 'A'
-        else:
-            rank = str(rank)
-
-        assert rank in Card.deck, f'{rank} not found'
-        self.rank = rank
-
-    def __repr__(self):
-        return self.rank
-
-    def __eq__(self, other):
-        if isinstance(other, Card):
-            return self.value == other.value
-        elif isinstance(other, str):
-            if other in Card.deck:
-                return self.value == Card(other).value
-            else:
-                raise TypeError(f'Unknown card rank {other}')
-        return False
-
-    def __gt__(self, other):
-        if isinstance(other, Card):
-            return self.value > other.value
-        elif isinstance(other, str):
-            if other in Card.deck:
-                return self.value > Card(other).value
-            else:
-                raise TypeError(f'Unknown card rank {other}')
-        else:
-            raise TypeError(f'Cannot add {type(other)}')
-
-    @property
-    def value(self) -> Union[int, tuple[int, int]]:
-        if self.rank == 'A': return 1, 11
-        if self.rank in 'TJQK': return 10
-        return int(self.rank)
-
-
-class Hand:
-    def __init__(self, cards: Union[List[Card], str] = None, is_split: bool = False):
-
-        if cards is None: cards = []
-
-        self.cards = [Card(c) if isinstance(c, str) else c for c in cards]
-        self.is_split = is_split
-
-    def __len__(self):
-        return len(self.cards)
-
-    def add_card(self, card: Card) -> None:
-        if isinstance(card, str):
-            card = Card(card)
-        self.cards.append(card)
-
-    def __eq__(self, other):
-        return self.is_blackjack and other.is_blackjack or \
-            not self.is_blackjack and not other.is_blackjack and self.value == other.value
-
-    def __gt__(self, other):
-        return self.value > other.value or self.is_blackjack and not other.is_blackjack
-
-    @property
-    def value(self) -> int:
-        if self.num_aces == 0: return self.hard_value
-        min_val = self.hard_value + self.num_aces
-        max_val = self.hard_value + self.num_aces - 1 + 11
-        if 21 in [min_val, max_val]: return 21
-        if min_val > 21: return min_val
-        if max_val > 21: return min_val
-        return max_val
-
-    @property
-    def soft_value(self) -> Union[int, tuple[int, int]]:
-        if self.num_aces == 0: return self.hard_value
-        min_val = self.hard_value + self.num_aces
-        max_val = self.hard_value + self.num_aces - 1 + 11
-        if 21 in [min_val, max_val]: return 21
-        if min_val > 21: return min_val
-        if max_val > 21: return min_val
-        return min_val, max_val
-
-    @property
-    def num_aces(self) -> int:
-        return [c for c in self.cards].count('A')
-
-    @property
-    def hard_cards(self) -> List[Card]:
-        return [c for c in self.cards if c.rank != 'A']
-
-    @property
-    def hard_value(self) -> int:
-        return sum(c.value for c in self.cards if c != 'A')
-
-    @property
-    def is_soft_value(self) -> bool:
-        return isinstance(self.soft_value, tuple)
-
-    @property
-    def is_blackjack(self) -> bool:
-        return len(self) == 2 and self.value == 21 and not self.is_split
-
-    @property
-    def is_splittable(self) -> bool:
-        return len(self) == 2 and self.cards[0].value == self.cards[1].value
-
-    @property
-    def pretty_val(self):
-        return ''.join([c.rank for c in self.cards])
-
-    def get_string_rep(self):
-        if self.is_soft_value:
-            return 'A{}'.format(self.hard_value + self.num_aces - 1)
-        return str(self)
-
-    def __repr__(self):
-        return ''.join([c.rank for c in self.cards])
-
-
-class Player:
-    def __init__(
-            self,
-            name: Union[str, int],
-            hand: Hand = None,
-            stake: int = 1
-    ):
-        self.name = name
-        self.hand = hand if hand is not None else Hand()
-        self.status = GameState.LIVE
-        self.decision_hist = []
-        self.stake = stake
-        self.is_doubled = False
-
-    def deal_card(self, card: Card) -> None:
-        self.hand.add_card(card)
-
-    def log_decision(self, decision: str) -> None:
-        self.decision_hist.append((deepcopy(self.hand), decision))
-
-    @property
-    def card_count(self) -> int:
-        return len(self.hand)
-
-    @property
-    def is_blackjack(self) -> bool:
-        return self.hand.value == 21 and len(self.hand) == 2
-
-    @property
-    def is_finished(self) -> bool:
-        return self.status in ['WON', 'LOST', 'DRAW']
-
-    @property
-    def profit(self) -> float:
-        if self.status == GameState.WON and self.is_blackjack: return 1.5 * self.stake
-        if self.status == GameState.WON: return self.stake
-        if self.status == GameState.DRAW: return 0
-        if self.status == GameState.LOST: return -self.stake
-        return 0
-
-    def __repr__(self):
-        return f'Player {self.name}: hand={self.hand} ({self.hand.value}) [{self.status}]'
-
-
-class Blackjack:
-
-    def __init__(
-            self,
-            n_packs: int = 4,
-            n_players: int = 1,
-            player_hands: List[Hand] = None,
-            dealer_hand: Hand = None,
-            blackjack_payout: float = 1.5,
-            quiet: bool = True,
-    ):
-        cards = 'A23456789TJQK'
-        self.blackjack_payout = blackjack_payout
-        self.n_packs = n_packs
-        self.shoe = list(cards) * n_packs * 4
-        shuffle(self.shoe)
-        self.dealer = Player('dealer')
-        self.players = [Player(i) for i in range(n_players)]
-
-        self.draw = self.draw_card()
-        self.quiet = quiet
-
-        if player_hands is not None:
-            assert len(player_hands) == n_players, 'There must be predefined hands as there are players'
-            assert dealer_hand is not None, 'Must also specify the dealer\'s hand if the players\' hand is specified'
-
-            for player, hand in zip(self.players, player_hands):
-                # assert len(hand) == 2, 'All predefined hands must contain exactly 2 cards'
-                player.hand = hand
-
-                # remove cards from shoe
-                for card in hand.cards:
-                    self.shoe.remove(str(card))
-
-            self.dealer.hand = dealer_hand
-
-            for card in dealer_hand.cards:
-                self.shoe.remove(str(card))
-
-            if len(dealer_hand) == 1:
-                self.dealer.deal_card(next(self.draw))
-
-        else:
-            self.__setup()
-
-        if self.dealer.is_blackjack:
-            for player in self.players:
-                self.stand_player(player)
-
-            self.hit_dealer()
-
-        self.player_turn = 0
-        self.current_player = self.players[0]
-
-    # TODO: should be a generator... REWORK THIS!!
-    def next_player(self) -> Union[Player, None]:
-
-        if all([player.is_finished or player.status == GameState.STAND for player in self.players]):
-            self.hit_dealer()
-            return
-
-        is_finished = True
-        player = None
-        while is_finished:
-            player = self.players[self.player_turn % self.n_players]
-            is_finished = player.is_finished or player.status == GameState.STAND
-            self.player_turn += 1
-        self.current_player = player
-        return player
-
-    def draw_card(self):
-        while not self.is_finished:
-            yield Card(self.shoe.pop())
-        yield -1
-
-    def __setup(self) -> None:
-
-        for player in self.players:
-            player.deal_card(next(self.draw))
-            player.deal_card(next(self.draw))
-
-        self.dealer.deal_card(next(self.draw))
-        self.dealer.deal_card(next(self.draw))
-
-    def hit_dealer(self) -> None:
-        if not self.is_dealer_turn:
-            if not self.quiet: print('It is not the dealer\'s turn!')
-            return
-
-        if self.is_finished:
-            if not self.quiet: print('Game is already finished!')
-            return
-
-        while self.dealer.hand.value <= 16 or self.dealer.hand.value == 17 and self.dealer.hand.is_soft_value:
-            self.dealer.deal_card(next(self.draw))
-
-        for player in self.players:
-            if player.is_finished: continue
-            if self.dealer.hand.value > 21:
-                player.status = GameState.WON
-            elif self.dealer.hand < player.hand:
-                player.status = GameState.WON
-            elif self.dealer.hand > player.hand:
-                player.status = GameState.LOST
-            elif self.dealer.hand == player.hand:
-                player.status = GameState.DRAW
-        # self.dealer.status = GameState.GAME_OVER
-
-    def double(self) -> None:
-        self.double_player(self.next_player())
-
-    def double_player(self, player: Player = None):
-        assert player.hand.value != 21, f'Cannot double on {player.hand}!'
-        assert len(player.hand) == 2, f'Can only double on starting hands, current hand: {player.hand}'
-        player.stake *= 2
-        player.is_doubled = True
-        player.log_decision(GameDecision.DOUBLE)
-        player.deal_card(next(self.draw))
-        player.status = GameState.LOST if player.hand.value > 21 else GameState.STAND
-
-    def hit(self) -> None:
-        return self.hit_player(self.next_player())
-
-    def hit_player(self, player: Player = None) -> None:
-        if player is None: return
-        assert player.hand.value != 21, f'Cannot hit on {player.hand}!'
-
-        player.log_decision(GameDecision.HIT)
-
-        card = next(self.draw)
-        player.deal_card(card)
-
-        if player.hand.value > 21:
-            player.status = GameState.LOST
-
-    def stand(self) -> None:
-        if self.is_dealer_turn: return
-        self.stand_player(self.next_player())
-
-    def stand_player(self, player: Player) -> None:
-        if player.is_finished: return
-        player.log_decision(GameDecision.STAND)
-        player.status = GameState.STAND
-
-    def split(self) -> None:
-        return self.split_player(self.next_player())
-
-    def split_player(self, player: Player) -> None:
-        if player is None: return
-        player.log_decision(GameDecision.SPLIT)
-
-        assert player.hand.is_splittable, f'Cannot Split {player.hand}!'
-
-        player.hand = Hand([player.hand.cards[0]], is_split=True)
-        new_player = Player(name=player.name, hand=deepcopy(player.hand))
-
-        self.players.insert(self.player_turn+1, new_player)
-        player.deal_card(next(self.draw))
-        new_player.deal_card(next(self.draw))
-
-        self.player_turn += 1  # account for new hand
-
-    def play_random(self) -> str:
-        player = self.next_player()
-        if player is None or player.status == GameState.STAND: return ''
-
-        if player.hand.value <= 11:  # doesn't make sense not to HIT for these hands. Impossible to lose if you hit!
-            decision = GameDecision.HIT
-        elif player.hand.value == 21:
-            decision = GameDecision.STAND
-        elif player.hand.is_splittable:
-            decision = choice([GameDecision.STAND, GameDecision.HIT, GameDecision.SPLIT, GameDecision.DOUBLE])
-        else:
-            decision = choice([GameDecision.STAND, GameDecision.HIT, GameDecision.DOUBLE])
-
-        if decision == GameDecision.HIT:
-            self.hit_player(player)
-        elif decision == GameDecision.STAND:
-            self.stand_player(player)
-        elif decision == GameDecision.SPLIT:
-            self.split_player(player)
-        elif decision == GameDecision.DOUBLE:
-            self.double_player(player)
-
-        return decision
-
-    def play_full_random(self) -> None:
-        while not self.is_finished:
-            self.play_random()
-
-    @property
-    def is_finished(self) -> bool:
-        return all(player.is_finished for player in self.players)
-
-    @property
-    def is_dealer_turn(self) -> bool:
-        all_players_standing = all(player.status == GameState.STAND for player in self.players if not player.is_finished)
-        return self.is_finished or all_players_standing
-
-    @property
-    def n_players(self) -> int:
-        return len(self.players)
-
-    def get_players_profit(self) -> dict:
-        # waaay too complicated!!
-        player_names = np.unique([player.name for player in self.players])
-        players = {pn: sum(p.profit for p in self.players if p.name == pn) for pn in player_names}
-        return players
-
-    def __repr__(self):
-        out = ['*' * 30, f'Dealer Hand: {self.dealer.hand.cards} ({self.dealer.hand.value})']
-
-        for player in self.players:
-            out.append(f'({player.status}) Player {player.name} Hand: {player.hand.cards} ({player.hand.value})')
-
-        return '\n'.join(out)
-
 
 def get_best_decision(x: dict, n_sims: int):
-    if not len(x): return GameDecision.HIT, 0
+    if not len(x):
+        return GameDecision.HIT, 0
 
     return max(x, key=x.get), max(x.values()) / n_sims
 
@@ -455,8 +40,10 @@ def simulate_game(
     if isinstance(player_hand, int):
         if player_hand in count_2combinations:
             player_hand = choice(count_2combinations[player_hand])
-        elif player_hand == 20: player_hand = '884'
-        elif player_hand == 21: player_hand = '993'
+        elif player_hand == 20:
+            player_hand = '884'
+        elif player_hand == 21:
+            player_hand = '993'
         else:
             player_hand = str(player_hand)
 
@@ -475,10 +62,14 @@ def simulate_game(
 
     if not game.is_finished:
 
-        if decision == GameDecision.HIT: game.hit()
-        if decision == GameDecision.STAND: game.stand()
-        if decision == GameDecision.DOUBLE: game.double()
-        if decision == GameDecision.SPLIT: game.split()
+        if decision == GameDecision.HIT:
+            game.hit()
+        if decision == GameDecision.STAND:
+            game.stand()
+        if decision == GameDecision.DOUBLE:
+            game.double()
+        if decision == GameDecision.SPLIT:
+            game.split()
 
         # rest can be in a separate method
         while not game.is_dealer_turn:
@@ -549,6 +140,7 @@ def get_basic_strategy(n_sims: int = 10_000, n_processes: int = None):
     hard_hands = list([int(x) for x in np.arange(21, 1, -1)])
     blackjack = ['AT']
 
+    # noinspection PyTypeChecker
     player_starting_vals = blackjack + hard_hands + soft_hands + splittable_hands
     dealer_starting_vals = list(np.arange(2, 12))
     outcomes = {k: defaultdict(int) for k in product(player_starting_vals, dealer_starting_vals)}
@@ -559,7 +151,8 @@ def get_basic_strategy(n_sims: int = 10_000, n_processes: int = None):
         tick = perf_counter()
 
         player_val = player_hand
-        if player_hand == 'T': player_val = 10
+        if player_hand == 'T':
+            player_val = 10
 
         print('Player Hand: {} (Value: {})\tDealer Value: {}....'.format(player_val, player_hand, dealer), end='')
 
@@ -652,29 +245,16 @@ def simulate_hand(
         print('% {} Wins: {:.2f}%'.format(decision, (1 + decision_profit[decision] / n_sims) / 2 * 100))
 
 
-if __name__ == '__main__':
-    import argparse
-
-    parser = argparse.ArgumentParser(description="Simulate Blackjack games and get optimal basic strategy")
-
-    parser.add_argument("-s", "--samples", type=int, default=None,
-                        help="Number of samples per player/dealer hand combination [def: 10_000]")
-    parser.add_argument("-p", "--processes", type=int, default=None,
-                        help="Number of processes to use (-1 for all). "
-                             "NOTE: not beneficial for < 10_000 n_sims [def: no parallel]")
-    parser.add_argument("-bs", "--basic_strategy", type=str,
-                        help="Path to CSV containing basic strategy to load")
-    parser.add_argument("-ev", "--expected_value", type=str,
-                        help="Path to CSV containing expected_value to load")
-    parser.add_argument("-g", "--generate", action='store_true',
-                        help="Generate basic strategy and save")
-
-    args = parser.parse_args()
-
-    if args.basic_strategy and args.expected_value:
-        import json
-        df_bs = pd.read_csv(args.basic_strategy, index_col=0)
-        df_ev = pd.read_csv(args.expected_value, index_col=0)
+def main(
+    basic_strategy: str = None,
+    expected_value: str = None,
+    samples: int = None,
+    processes: int = None,
+    generate: bool = False,
+):
+    if basic_strategy and expected_value:
+        df_bs = pd.read_csv(basic_strategy, index_col=0)
+        df_ev = pd.read_csv(expected_value, index_col=0)
         json_bs = json.loads(df_bs.to_json())
         json_ev = json.loads(df_ev.to_json())
 
@@ -695,17 +275,45 @@ if __name__ == '__main__':
         simulate_hand('22', 2, 1000, quiet=False, basic_strategy=bs, expected_profit=ev)
         simulate_hand('22', 2, 10000, quiet=True, basic_strategy=bs, expected_profit=ev)
 
-    if args.samples:
+    if samples:
 
         df_decision, df_profit = get_basic_strategy(
-            n_sims=args.samples,
-            n_processes=args.processes,
+            n_sims=samples,
+            n_processes=processes,
         )
 
-        if args.generate:
-            df_decision.to_csv(os.path.join(BASE_PATH, 'basic_strategy.csv'))
-            df_profit.to_csv(os.path.join(BASE_PATH, 'basic_strategy_profit.csv'))
+        if generate:
+            df_decision.to_csv(os.path.join(DATA_PATH, 'basic_strategy.csv'))
+            df_profit.to_csv(os.path.join(DATA_PATH, 'basic_strategy_profit.csv'))
 
         pprint(df_decision)
         pprint(df_profit)
         print(df_profit.mean().mean())
+
+
+if __name__ == '__main__':
+    import argparse
+
+    parser = argparse.ArgumentParser(description="Simulate Blackjack games and get optimal basic strategy")
+
+    parser.add_argument("-s", "--samples", type=int, default=None,
+                        help="Number of samples per player/dealer hand combination [def: 10_000]")
+    parser.add_argument("-p", "--processes", type=int, default=None,
+                        help="Number of processes to use (-1 for all). "
+                             "NOTE: not beneficial for < 10_000 n_sims [def: no parallel]")
+    parser.add_argument("-bs", "--basic_strategy", type=str,
+                        help="Path to CSV containing basic strategy to load")
+    parser.add_argument("-ev", "--expected_value", type=str,
+                        help="Path to CSV containing expected_value to load")
+    parser.add_argument("-g", "--generate", action='store_true',
+                        help="Generate basic strategy and save")
+
+    args = parser.parse_args()
+
+    main(
+        basic_strategy=args.basic_strategy,
+        expected_value=args.expected_value,
+        samples=args.samples,
+        processes=args.processes,
+        generate=args.generate,
+    )
