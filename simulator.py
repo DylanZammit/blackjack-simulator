@@ -1,4 +1,4 @@
-from utils import GameDecision, count_2combinations, DATA_PATH
+from blackjack.utils import GameDecision, count_2combinations, DATA_PATH
 from collections import defaultdict
 from itertools import product
 from functools import partial
@@ -7,8 +7,8 @@ import multiprocessing as mp
 from pprint import pprint
 from random import choice
 
-from game import Blackjack
-from hand import Hand
+from blackjack.game import Blackjack
+from blackjack.hand import Hand
 
 import pandas as pd
 import numpy as np
@@ -268,9 +268,7 @@ def simulate_hand(
             num_decks=num_decks,
         )
 
-        print('Expected Profit')
-        print(decision, decision_profit[decision] / n_sims)
-        print('% {} Wins: {:.2f}%'.format(decision, (1 + decision_profit[decision] / n_sims) / 2 * 100))
+        print('Expected Profit:', decision, decision_profit[decision] / n_sims)
 
 
 def main(
@@ -304,8 +302,8 @@ def main(
         print(df_bs)
         print(df_ev)
         simulate_hand(
-            players=16,
-            dealer=10,
+            players=11,
+            dealer=11,
             n_sims=1000,
             quiet=False,
             basic_strategy=bs,
@@ -317,8 +315,8 @@ def main(
         )
 
         simulate_hand(
-            players=16,
-            dealer=10,
+            players=11,
+            dealer=11,
             n_sims=100000,
             quiet=True,
             basic_strategy=bs,
