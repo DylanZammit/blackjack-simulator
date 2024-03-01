@@ -35,6 +35,8 @@ def simulate_game(
         expected_profit: dict = None,
         quiet: bool = True,
         n_packs: int = 6,
+        double_after_split: bool = True,
+        hit_on_soft_17: bool = True,
 ):
 
     if isinstance(player_hand, int):
@@ -58,6 +60,8 @@ def simulate_game(
         player_hands=[Hand(player_hand)],
         dealer_hand=Hand(dh),
         n_packs=n_packs,
+        double_after_split=double_after_split,
+        hit_on_soft_17=hit_on_soft_17,
     )
 
     if not game.is_finished:
@@ -123,18 +127,31 @@ def simulate_games_profit(
         decision: str,
         basic_strategy: dict = None,
         expected_profit: dict = None,
+        double_after_split: bool = True,
+        hit_on_soft_17: bool = True,
+        num_decks: bool = 6,
         quiet: bool = True,
 ):
     return sum(simulate_game(
-        player_hand,
-        dealer_hand,
-        decision,
-        basic_strategy,
-        expected_profit,
-        quiet) for _ in range(n_sims))
+        player_hand=player_hand,
+        dealer_hand=dealer_hand,
+        decision=decision,
+        basic_strategy=basic_strategy,
+        expected_profit=expected_profit,
+        double_after_split=double_after_split,
+        hit_on_soft_17=hit_on_soft_17,
+        n_packs=num_decks,
+        quiet=quiet,
+    ) for _ in range(n_sims))
 
 
-def get_basic_strategy(n_sims: int = 10_000, n_processes: int = None):
+def get_basic_strategy(
+        n_sims: int = 10_000, 
+        n_processes: int = None,
+        double_after_split: bool = True,
+        hit_on_soft_17: bool = True,
+        num_decks: bool = 6,
+):
     splittable_hands = [f'{c}{c}' for c in 'A23456789T']
     soft_hands = [f'A{c}' for c in '23456789']
     hard_hands = list([int(x) for x in np.arange(21, 1, -1)])
@@ -177,6 +194,9 @@ def get_basic_strategy(n_sims: int = 10_000, n_processes: int = None):
                 decision=decision,
                 basic_strategy=best_play,
                 expected_profit=expected_profit,
+                double_after_split=double_after_split,
+                hit_on_soft_17=hit_on_soft_17,
+                num_decks=num_decks,
             )
 
             if n_processes is not None:
@@ -220,6 +240,10 @@ def simulate_hand(
         quiet: bool = True,
         basic_strategy: dict = None,
         expected_profit: dict = None,
+
+        double_after_split: bool = True,
+        hit_on_soft_17: bool = True,
+        num_decks: bool = 6,
 ):
 
     decisions = [GameDecision.STAND, GameDecision.HIT, GameDecision.DOUBLE]
@@ -238,6 +262,10 @@ def simulate_hand(
             quiet=quiet,
             basic_strategy=basic_strategy,
             expected_profit=expected_profit,
+
+            double_after_split=double_after_split,
+            hit_on_soft_17=hit_on_soft_17,
+            num_decks=num_decks,
         )
 
         print('Expected Profit')
@@ -251,6 +279,9 @@ def main(
     samples: int = None,
     processes: int = None,
     generate: bool = False,
+    double_after_split: bool = True,
+    hit_on_soft_17: bool = True,
+    num_decks: bool = 6,
 ):
     if basic_strategy and expected_value:
         df_bs = pd.read_csv(basic_strategy, index_col=0)
@@ -272,14 +303,40 @@ def main(
 
         print(df_bs)
         print(df_ev)
-        simulate_hand('22', 2, 1000, quiet=False, basic_strategy=bs, expected_profit=ev)
-        simulate_hand('22', 2, 10000, quiet=True, basic_strategy=bs, expected_profit=ev)
+        simulate_hand(
+            players=16,
+            dealer=10,
+            n_sims=1000,
+            quiet=False,
+            basic_strategy=bs,
+            expected_profit=ev,
+
+            double_after_split=double_after_split,
+            hit_on_soft_17=hit_on_soft_17,
+            num_decks=num_decks,
+        )
+
+        simulate_hand(
+            players=16,
+            dealer=10,
+            n_sims=100000,
+            quiet=True,
+            basic_strategy=bs,
+            expected_profit=ev,
+
+            double_after_split=double_after_split,
+            hit_on_soft_17=hit_on_soft_17,
+            num_decks=num_decks,
+        )
 
     if samples:
 
         df_decision, df_profit = get_basic_strategy(
             n_sims=samples,
             n_processes=processes,
+            double_after_split=double_after_split,
+            hit_on_soft_17=hit_on_soft_17,
+            num_decks=num_decks,
         )
 
         if generate:
@@ -307,6 +364,12 @@ if __name__ == '__main__':
                         help="Path to CSV containing expected_value to load")
     parser.add_argument("-g", "--generate", action='store_true',
                         help="Generate basic strategy and save")
+    parser.add_argument("-das", "--double_after_split", action='store_true',
+                        help="Allow double after splits")
+    parser.add_argument("-H17", "--hit_on_soft_17", action='store_true',
+                        help="Dealer hits on soft 17")
+    parser.add_argument("-nd", "--num_decks", type=int,
+                        help="Number of decks in the shoe", default=6)
 
     args = parser.parse_args()
 
@@ -316,4 +379,7 @@ if __name__ == '__main__':
         samples=args.samples,
         processes=args.processes,
         generate=args.generate,
+        double_after_split=args.double_after_split,
+        hit_on_soft_17=args.hit_on_soft_17,
+        num_decks=args.num_decks,
     )

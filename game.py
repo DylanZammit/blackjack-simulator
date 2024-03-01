@@ -17,12 +17,16 @@ class Blackjack:
             player_hands: List[Hand] = None,
             dealer_hand: Hand = None,
             blackjack_payout: float = 1.5,
+            hit_on_soft_17: bool = True,
+            double_after_split: bool = False,
             quiet: bool = True,
     ):
         cards = 'A23456789TJQK'
+        self.hit_on_17 = hit_on_soft_17
         self.blackjack_payout = blackjack_payout
         self.n_packs = n_packs
         self.shoe = list(cards) * n_packs * 4
+        self.double_after_split = double_after_split
         shuffle(self.shoe)
         self.dealer = Player('dealer')
         self.players = [Player(i) for i in range(n_players)]
@@ -103,7 +107,8 @@ class Blackjack:
                 print('Game is already finished!')
             return
 
-        while self.dealer.hand.value <= 16 or self.dealer.hand.value == 17 and self.dealer.hand.is_soft_value:
+        while self.dealer.hand.value <= 16 or \
+                self.dealer.hand.value == 17 and self.dealer.hand.is_soft_value and self.hit_on_17:
             self.dealer.deal_card(next(self.draw))
 
         for player in self.players:
@@ -124,6 +129,8 @@ class Blackjack:
     def double_player(self, player: Player = None):
         assert player.hand.value != 21, f'Cannot double on {player.hand}!'
         assert len(player.hand) == 2, f'Can only double on starting hands, current hand: {player.hand}'
+        assert self.double_after_split or not player.hand.is_split, 'Cannot double after split!'
+
         player.stake *= 2
         player.is_doubled = True
         player.log_decision(GameDecision.DOUBLE)
