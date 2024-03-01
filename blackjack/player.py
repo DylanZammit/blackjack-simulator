@@ -1,6 +1,6 @@
-from utils import GameState
-from hand import Hand
-from card import Card
+from blackjack.utils import GameState
+from blackjack.hand import Hand
+from blackjack.card import Card
 from typing import Union
 from copy import deepcopy
 

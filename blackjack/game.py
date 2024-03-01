@@ -1,7 +1,7 @@
-from utils import GameDecision, GameState
-from hand import Hand
-from card import Card
-from player import Player
+from blackjack.utils import GameDecision, GameState
+from blackjack.hand import Hand
+from blackjack.card import Card
+from blackjack.player import Player
 from typing import Union, List
 from copy import deepcopy
 from random import shuffle, choice
