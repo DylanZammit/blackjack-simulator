@@ -1,8 +1,6 @@
-from blackjack.utils import GameState
 from blackjack.hand import Hand
-from blackjack.card import Card
 from typing import Union
-from copy import deepcopy
+from blackjack.utils import GameState
 
 
 class Player:
@@ -13,41 +11,37 @@ class Player:
             stake: int = 1
     ):
         self.name = name
-        self.hand = hand if hand is not None else Hand()
-        self.status = GameState.LIVE
+        hand = hand if hand is not None else Hand(stake=stake, player_name=name)
+        self.hands = [hand]
         self.decision_hist = []
-        self.stake = stake
-        self.is_doubled = False
-
-    def deal_card(self, card: Card) -> None:
-        self.hand.add_card(card)
-
-    def log_decision(self, decision: str) -> None:
-        self.decision_hist.append((deepcopy(self.hand), decision))
 
     @property
-    def card_count(self) -> int:
-        return len(self.hand)
+    def hand(self) -> Hand:
+        return self.hands[0]
 
     @property
-    def is_blackjack(self) -> bool:
-        return self.hand.value == 21 and len(self.hand) == 2
+    def status(self) -> GameState:
+        if any(not hand.is_finished for hand in self.hands) or not len(self.hands):
+            return GameState.LIVE
+
+        if self.profit == 0:
+            return GameState.DRAW
+        elif self.profit > 0:
+            return GameState.WON
+        elif self.profit < 0:
+            return GameState.LOST
+
+    @property
+    def profit(self):
+        return sum(hand.profit for hand in self.hands)
+
+    @property
+    def stake(self):
+        return sum(hand.stake for hand in self.hands)
 
     @property
     def is_finished(self) -> bool:
-        return self.status in ['WON', 'LOST', 'DRAW']
-
-    @property
-    def profit(self) -> float:
-        if self.status == GameState.WON and self.is_blackjack:
-            return 1.5 * self.stake
-        if self.status == GameState.WON:
-            return self.stake
-        if self.status == GameState.DRAW:
-            return 0
-        if self.status == GameState.LOST:
-            return -self.stake
-        return 0
+        return all(hand.is_finished for hand in self.hands)
 
     def __repr__(self):
-        return f'Player {self.name}: hand={self.hand} ({self.hand.value}) [{self.status}]'
+        return f'Player {self.name}: hands={self.hands} [{self.status}]'

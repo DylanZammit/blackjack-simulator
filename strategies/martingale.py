@@ -34,15 +34,15 @@ def martingale(
         dealer_hand = game.dealer.hand.cards[0].value
         dealer_hand = dealer_hand if isinstance(dealer_hand, int) else 11
 
-        player = game.players[0]
         stake_amount = min(2 ** n_consecutive_losses * initial_bet, bank)
-        player.stake = stake_amount  # TODO: remove monkey patching!!
 
+        player = game.players[0]
+        player.hand.stake = stake_amount
         while not game.is_dealer_turn:
-            player = game.next_player()
+            hand = game.next_hand()
 
-            if player.hand.is_splittable:
-                player_hand = str(player.hand).replace('J', 'T').replace('Q', 'T').replace('K', 'T')
+            if hand.is_splittable:
+                player_hand = str(hand)
 
                 if player_hand.isnumeric():
                     player_hand = int(player_hand)
@@ -50,35 +50,28 @@ def martingale(
                 if player_hand == 'AA':
                     player_hand = 12
 
-            elif player.hand.is_soft_value:
-                player_hand = player.hand.get_string_rep()
+            elif hand.is_soft_value:
+                player_hand = hand.get_string_rep()
             else:
-                player_hand = player.hand.value
+                player_hand = hand.value()
 
             opt_decision = basic_strategy[(player_hand, dealer_hand)]
 
             # Can only double on first two cards. Hit otherwise
-            if opt_decision == GameDecision.DOUBLE and len(player.hand) != 2:
-                opt_decision = GameDecision.HIT
+            if opt_decision == GameDecision.DOUBLE and len(hand) != 2:
+                opt_decision = GameDecision.HIT.value
 
-            if opt_decision == GameDecision.HIT:
-                game.hit_player(player)
-            elif opt_decision == GameDecision.STAND:
-                game.stand_player(player)
-            elif opt_decision == GameDecision.SPLIT:
-                game.split_player(player)
-            elif opt_decision == GameDecision.DOUBLE:
-                game.double_player(player)
+            action = getattr(game, opt_decision)
+            action()
 
         game.hit_dealer()
 
-        profit = game.get_players_profit()[0]
-        bank += profit
+        bank += player.profit
         bank = max(0, bank)  # technically not the right way to do this
         bank_hist.append(bank)
 
         n_games += 1
-        n_consecutive_losses = 0 if profit > 0 else n_consecutive_losses + 1
+        n_consecutive_losses = 0 if player.profit > 0 else (n_consecutive_losses + 1)
 
     print(bank_hist)
     plt.plot(bank_hist)
@@ -119,4 +112,6 @@ if __name__ == '__main__':
         double_after_split=args.double_after_split,
         hit_on_soft_17=args.hit_on_soft_17,
         num_decks=args.num_decks,
+        bank=1000,
+        initial_bet=1,
     )
