@@ -1,5 +1,6 @@
 from blackjack.utils import GameDecision
 from blackjack.game import Blackjack
+from blackjack.hand import Hand
 import matplotlib.pyplot as plt
 import pandas as pd
 import json
@@ -7,6 +8,24 @@ import json
 
 pd.set_option('display.max_columns', None)
 pd.set_option('display.max_rows', None)
+
+
+def format_hand(hand: Hand):
+    if hand.is_splittable:
+        player_hand = str(hand)
+
+        if player_hand.isnumeric():
+            player_hand = int(player_hand)
+
+        if player_hand == 'AA':
+            player_hand = 12
+
+    elif hand.is_soft_value:
+        player_hand = hand.get_string_rep()
+    else:
+        player_hand = hand.value()
+
+    return player_hand
 
 
 def martingale(
@@ -40,20 +59,7 @@ def martingale(
         player.hand.stake = stake_amount
         while not game.is_dealer_turn:
             hand = game.next_hand()
-
-            if hand.is_splittable:
-                player_hand = str(hand)
-
-                if player_hand.isnumeric():
-                    player_hand = int(player_hand)
-
-                if player_hand == 'AA':
-                    player_hand = 12
-
-            elif hand.is_soft_value:
-                player_hand = hand.get_string_rep()
-            else:
-                player_hand = hand.value()
+            player_hand = format_hand(hand)
 
             opt_decision = basic_strategy[(player_hand, dealer_hand)]
 
@@ -61,8 +67,7 @@ def martingale(
             if opt_decision == GameDecision.DOUBLE and len(hand) != 2:
                 opt_decision = GameDecision.HIT.value
 
-            action = getattr(game, opt_decision)
-            action()
+            getattr(game, opt_decision)()
 
         game.hit_dealer()
 
