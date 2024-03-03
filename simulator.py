@@ -448,8 +448,8 @@ if __name__ == '__main__':
     parser.add_argument("-nd", "--n_packs", type=int,
                         help="Number of decks in the shoe", default=6)
 
-    bs, ev = read_strategy('basic_strategy.csv', 'basic_strategy_profit.csv')
-    simulate_optimal_game(n_sims=100_000, basic_strategy=bs, expected_profit=ev)
+    # bs, ev = read_strategy('basic_strategy.csv', 'basic_strategy_profit.csv')
+    # simulate_optimal_game(n_sims=100_000, basic_strategy=bs, expected_profit=ev)
 
     args = parser.parse_args()
     main(

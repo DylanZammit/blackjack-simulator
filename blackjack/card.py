@@ -48,3 +48,15 @@ class Card:
             return 10
 
         return int(self.rank)
+
+    @property
+    def high_low_count(self):
+        if isinstance(self.value, tuple):
+            return -1
+
+        if self.value <= 6:
+            return 1
+        elif 7 <= self.value <= 9:
+            return 0
+        else:
+            return -1

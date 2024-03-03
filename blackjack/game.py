@@ -4,9 +4,11 @@ from blackjack.card import Card
 from blackjack.player import Player
 from typing import List, Generator
 from random import shuffle
+from math import ceil
 
 
 class Blackjack:
+    CARDS = 'A23456789TJQK'
 
     def __init__(
             self,
@@ -18,44 +20,72 @@ class Blackjack:
             double_after_split: bool = False,
             quiet: bool = True,
     ):
-
-        cards = 'A23456789TJQK'
-        self.hit_on_17 = hit_on_soft_17
         self.n_packs = n_packs
-        self.shoe = list(cards) * n_packs * 4
+        self.discarded = []
+        self.shoe = list(self.CARDS) * self.n_packs * 4
+
+        self.hit_on_17 = hit_on_soft_17
         self.double_after_split = double_after_split
-        shuffle(self.shoe)
 
         self.draw = self.draw_card()
         self.quiet = quiet
 
         self.dealer = Player('dealer', hand=dealer_hand)
 
-        for card in self.dealer.hand.cards:
-            self.shoe.remove(str(card))
-
-        if players is not None:
-            self.players = players
-
-            # remove cards from shoe
-            for player in players:
-                for hand in player.hands:
-                    for card in hand.cards:
-                        self.shoe.remove(str(card))
-        else:
-            self.players = [Player(i) for i in range(n_players)]
+        self.players = [Player(i) for i in range(n_players)] if not players else players
+        self.is_finished = False
 
         self.__setup()
 
-        self.player_name_map = {p.name: p for p in self.players}
-        self.player_turn = 0
         self.current_player = self.players[0]
 
-    def new_game(self):
-        for player in self.players:
-            player.reset()
+    def __setup(self) -> None:
 
+        # set 0.2 as parameter or cut card
+        if len(self.shoe) / (len(self.shoe) + len(self.discarded)) < 0.2:
+            self.shuffle()
+
+        if self.is_finished:
+            self.dealer = Player('dealer')
+
+        # remove cards from shoe
+        for player in self.players + [self.dealer]:
+            for hand in player.hands:
+                for card in hand.cards:
+                    self.discarded.append(str(card))
+                    self.shoe.remove(str(card))
+
+        for player in self.players + [self.dealer]:
+            for hand in player.hands:
+                remaining_cards = 2 - len(hand)
+                for _ in range(remaining_cards):
+                    hand.deal_card(next(self.draw))
+
+        self.player_name_map = {p.name: p for p in self.players}
+
+        self.is_finished = False
+        if self.dealer.hand.is_blackjack:
+            while self.next_hand() is not None:
+                self.stand()
+            self.hit_dealer()
+            self.is_finished = True
+
+    def shuffle(self):
+        self.shoe = list(self.CARDS) * self.n_packs * 4
+        shuffle(self.shoe)
+        self.discarded = []
+
+    def new_game(self, players: List[Player] = None):
+        self.players = [Player(i) for i in range(self.n_players)] if not players else players
         self.__setup()
+
+    @property
+    def high_low_count(self):
+        return sum(Card(c).high_low_count for c in self.discarded)
+
+    @property
+    def true_count(self):
+        return ceil(self.high_low_count / self.n_packs)
 
     @property
     def game_round(self):
@@ -76,23 +106,10 @@ class Blackjack:
 
     def draw_card(self):
         while len(self.shoe) > 0:
-            yield Card(self.shoe.pop())
+            c = self.shoe.pop()
+            self.discarded.append(c)
+            yield Card(c)
         yield -1
-
-    def __setup(self) -> None:
-
-        for player in self.players + [self.dealer]:
-            for hand in player.hands:
-                remaining_cards = 2 - len(hand)
-                for _ in range(remaining_cards):
-                    hand.deal_card(next(self.draw))
-
-        self.is_finished = False
-        if self.dealer.hand.is_blackjack:
-            while self.next_hand() is not None:
-                self.stand()
-            self.hit_dealer()
-            self.is_finished = True
 
     def hit_dealer(self) -> None:
         dealer_hand = self.dealer.hand
