@@ -24,6 +24,7 @@ def get_best_decision(x: dict, n_sims: int) -> tuple[GameDecision, float]:
     if not len(x):
         return GameDecision.HIT, 0
 
+    # TODO: consider varying EV
     return max(x, key=x.get), max(x.values()) / n_sims
 
 
@@ -70,7 +71,7 @@ def simulate_game(
     )
     dealer_hand = game.dealer.hand.cards[0].value
     dealer_hand = dealer_hand if isinstance(dealer_hand, int) else 11
-    # if game.dealer.hand.value() == 21: breakpoint()
+
     if not game.is_finished:
 
         if decision is not None:
@@ -108,6 +109,9 @@ def simulate_game(
     if not quiet:
         print(game)
         for player in game.players:
+            if game.dealer.hand.is_blackjack:
+                for hand in player.hands:
+                    hand.stake = 1
             print(f'Player {player.name}:', player.decision_hist)
             print(f'Profit = €{player.profit}, Stake = €{player.stake}')
 
@@ -375,23 +379,23 @@ def main(
 
         bs, ev = read_strategy(basic_strategy, expected_value)
 
-        # simulate_hand(
-        #     players=11,
-        #     dealer=10,
-        #     n_sims=1000,
-        #     quiet=False,
-        #     basic_strategy=bs,
-        #     expected_profit=ev,
-        #
-        #     double_after_split=double_after_split,
-        #     hit_on_soft_17=hit_on_soft_17,
-        #     n_packs=n_packs,
-        # )
+        simulate_hand(
+            players=11,
+            dealer=11,
+            n_sims=1000,
+            quiet=False,
+            basic_strategy=bs,
+            expected_profit=ev,
+
+            double_after_split=double_after_split,
+            hit_on_soft_17=hit_on_soft_17,
+            n_packs=n_packs,
+        )
 
         simulate_hand(
             players=11,
             dealer=11,
-            n_sims=10000,
+            n_sims=200000,
             quiet=True,
             basic_strategy=bs,
             expected_profit=ev,
@@ -443,7 +447,9 @@ if __name__ == '__main__':
                         help="Number of decks in the shoe", default=6)
 
     # bs, ev = read_strategy('basic_strategy.csv', 'basic_strategy_profit.csv')
-    # simulate_optimal_game(n_sims=100000, basic_strategy=bs, expected_profit=ev)
+    # simulate_optimal_game(n_sims=100_000, basic_strategy=bs, expected_profit=ev)
+    #
+    # import cProfile
 
     args = parser.parse_args()
     main(

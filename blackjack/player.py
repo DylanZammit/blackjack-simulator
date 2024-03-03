@@ -14,6 +14,10 @@ class Player:
         hand = hand if hand is not None else Hand(stake=stake, player_name=name)
         self.hands = [hand]
         self.decision_hist = []
+        self.original_stake = stake
+
+    def reset(self):
+        self.hands = [Hand(stake=self.original_stake, player_name=self.name)]
 
     @property
     def hand(self) -> Hand:
