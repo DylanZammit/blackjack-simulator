@@ -11,13 +11,14 @@ class Blackjack:
     def __init__(
             self,
             n_packs: int = 4,
+            players: List[Player] = None,
             n_players: int = 1,
-            player_hands: List[Hand] = None,
             dealer_hand: Hand = None,
             hit_on_soft_17: bool = True,
             double_after_split: bool = False,
             quiet: bool = True,
     ):
+
         cards = 'A23456789TJQK'
         self.hit_on_17 = hit_on_soft_17
         self.n_packs = n_packs
@@ -33,29 +34,18 @@ class Blackjack:
         for card in self.dealer.hand.cards:
             self.shoe.remove(str(card))
 
-        if player_hands is not None:
-            self.players = [Player(i, hand=hand) for i, hand in enumerate(player_hands)]
-            assert len(player_hands) == n_players, 'There must be predefined hands as there are players'
-            assert dealer_hand is not None, 'Must also specify the dealer\'s hand if the players\' hand is specified'
+        if players is not None:
+            self.players = players
 
             # remove cards from shoe
-            for hand in player_hands:
-                for card in hand.cards:
-                    self.shoe.remove(str(card))
-
-            if len(self.dealer.hand) == 1:
-                self.dealer.hand.deal_card(next(self.draw))
-
-            self.is_finished = False
-            if self.dealer.hand.is_blackjack:
-                while self.next_hand() is not None:
-                    self.stand()
-                self.hit_dealer()
-                self.is_finished = True
-
+            for player in players:
+                for hand in player.hands:
+                    for card in hand.cards:
+                        self.shoe.remove(str(card))
         else:
             self.players = [Player(i) for i in range(n_players)]
-            self.new_game()
+
+        self.__setup()
 
         self.player_name_map = {p.name: p for p in self.players}
         self.player_turn = 0
@@ -66,12 +56,6 @@ class Blackjack:
             player.reset()
 
         self.__setup()
-        self.is_finished = False
-        if self.dealer.hand.is_blackjack:
-            while self.next_hand() is not None:
-                self.stand()
-            self.hit_dealer()
-            self.is_finished = True
 
     @property
     def game_round(self):
@@ -80,9 +64,6 @@ class Blackjack:
         return min(hand.round for player in self.players for hand in player.hands if hand.status.value == GameState.LIVE) + 1
 
     def next_hand(self) -> Hand | None:
-        if self.dealer.hand.is_blackjack:
-            return
-
         for player in self.players:
             for hand in player.hands:
                 if hand.round < self.game_round and hand.status.value == GameState.LIVE:
@@ -100,12 +81,18 @@ class Blackjack:
 
     def __setup(self) -> None:
 
-        for _ in range(2):
-            for player in self.players:
-                for hand in player.hands:
+        for player in self.players + [self.dealer]:
+            for hand in player.hands:
+                remaining_cards = 2 - len(hand)
+                for _ in range(remaining_cards):
                     hand.deal_card(next(self.draw))
 
-        self.dealer.hand.deal_card(next(self.draw))
+        self.is_finished = False
+        if self.dealer.hand.is_blackjack:
+            while self.next_hand() is not None:
+                self.stand()
+            self.hit_dealer()
+            self.is_finished = True
 
     def hit_dealer(self) -> None:
         dealer_hand = self.dealer.hand

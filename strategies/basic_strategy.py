@@ -1,5 +1,7 @@
-from blackjack.utils import GameDecision, format_hand
+from blackjack.utils import GameDecision
 from blackjack.game import Blackjack
+from blackjack.player import Player
+from blackjack.hand import format_hand
 import matplotlib.pyplot as plt
 import pandas as pd
 import json
@@ -7,7 +9,6 @@ import json
 
 pd.set_option('display.max_columns', None)
 pd.set_option('display.max_rows', None)
-
 
 
 def play_basic_strategy(
@@ -25,7 +26,9 @@ def play_basic_strategy(
 
     n_games = 0
     while bank > 0:
+        player = Player(stake=initial_bet)
         game = Blackjack(
+            players=[player],
             n_packs=num_decks,
             double_after_split=double_after_split,
             hit_on_soft_17=hit_on_soft_17,
@@ -34,10 +37,6 @@ def play_basic_strategy(
         dealer_hand = game.dealer.hand.cards[0].value
         dealer_hand = dealer_hand if isinstance(dealer_hand, int) else 11
 
-        stake_amount = initial_bet
-
-        player = game.players[0]
-        player.hand.stake = stake_amount
         while not game.is_dealer_turn:
             hand = game.next_hand()
             player_hand = format_hand(hand)

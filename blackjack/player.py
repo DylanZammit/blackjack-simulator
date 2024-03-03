@@ -6,7 +6,7 @@ from blackjack.utils import GameState
 class Player:
     def __init__(
             self,
-            name: Union[str, int],
+            name: Union[str, int] = 0,
             hand: Hand = None,
             stake: int = 1
     ):

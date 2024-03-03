@@ -1,5 +1,7 @@
-from blackjack.utils import GameDecision, format_hand
+from blackjack.utils import GameDecision
+from blackjack.hand import format_hand
 from blackjack.game import Blackjack
+from blackjack.player import Player
 import matplotlib.pyplot as plt
 import pandas as pd
 import json
@@ -25,7 +27,10 @@ def martingale(
     n_consecutive_losses = 0
     n_games = 0
     while bank > 0:
+        stake_amount = min(2 ** n_consecutive_losses * initial_bet, bank)
+        player = Player(stake=stake_amount)
         game = Blackjack(
+            players=[player],
             n_packs=num_decks,
             double_after_split=double_after_split,
             hit_on_soft_17=hit_on_soft_17,
@@ -34,10 +39,6 @@ def martingale(
         dealer_hand = game.dealer.hand.cards[0].value
         dealer_hand = dealer_hand if isinstance(dealer_hand, int) else 11
 
-        stake_amount = min(2 ** n_consecutive_losses * initial_bet, bank)
-
-        player = game.players[0]
-        player.hand.stake = stake_amount
         while not game.is_dealer_turn:
             hand = game.next_hand()
             player_hand = format_hand(hand)

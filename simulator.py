@@ -9,6 +9,7 @@ from random import choice
 
 from blackjack.game import Blackjack
 from blackjack.hand import Hand
+from blackjack.player import Player
 
 import pandas as pd
 import numpy as np
@@ -51,7 +52,7 @@ def simulate_game(
                 player_hand = '993'
             else:
                 player_hand = str(player_hand)
-        ph = [Hand(player_hand, player_name=0)]
+        ph = Hand(player_hand, player_name=0)
 
     if dealer_hand is not None:
         if dealer_hand == 10:
@@ -62,8 +63,9 @@ def simulate_game(
             dh = str(dealer_hand)
         dh = Hand(dh)
 
+    player = Player(hand=ph, stake=1, name=0)
     game = Blackjack(
-        player_hands=ph,
+        players=[player],
         dealer_hand=dh,
         n_packs=n_packs,
         double_after_split=double_after_split,
@@ -335,7 +337,7 @@ def simulate_hand(
             n_packs=n_packs,
         )
 
-        print('Expected Profit:', decision, decision_profit[decision.value] / n_sims)
+        print('Expected Profit:', decision.value, decision_profit[decision.value] / n_sims)
 
 
 def read_strategy(
@@ -395,7 +397,7 @@ def main(
         simulate_hand(
             players=11,
             dealer=11,
-            n_sims=200000,
+            n_sims=50000,
             quiet=True,
             basic_strategy=bs,
             expected_profit=ev,
@@ -446,10 +448,8 @@ if __name__ == '__main__':
     parser.add_argument("-nd", "--n_packs", type=int,
                         help="Number of decks in the shoe", default=6)
 
-    # bs, ev = read_strategy('basic_strategy.csv', 'basic_strategy_profit.csv')
-    # simulate_optimal_game(n_sims=100_000, basic_strategy=bs, expected_profit=ev)
-    #
-    # import cProfile
+    bs, ev = read_strategy('basic_strategy.csv', 'basic_strategy_profit.csv')
+    simulate_optimal_game(n_sims=100_000, basic_strategy=bs, expected_profit=ev)
 
     args = parser.parse_args()
     main(
