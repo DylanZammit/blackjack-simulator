@@ -18,17 +18,17 @@ def high_low(
     num_decks: bool = 6,
 
     bank: int = 100_000,
-    initial_bet: int = 10,
+    low_stake: int = 5,
 ):
 
     initial_bank = bank
     bank_hist = [bank]
     true_count_hist = [0]
 
-    n_consecutive_losses = 0
     n_games = 0
+    betting_unit = bank // 1000
 
-    player = Player(stake=initial_bet)
+    player = Player(stake=low_stake)
     game = Blackjack(
         players=[player],
         n_packs=num_decks,
@@ -36,7 +36,7 @@ def high_low(
         hit_on_soft_17=hit_on_soft_17,
     )
 
-    while abs((bank - initial_bank) / initial_bank * 100) < 1:
+    while abs((bank - initial_bank) / initial_bank * 100) < 5:
 
         dealer_hand = game.dealer.hand.cards[0].value
         dealer_hand = dealer_hand if isinstance(dealer_hand, int) else 11
@@ -61,20 +61,17 @@ def high_low(
         true_count_hist.append(game.true_count)
 
         n_games += 1
-        n_consecutive_losses = 0 if player.profit > 0 else (n_consecutive_losses + 1)
 
-        # stake = initial_bet
-        stake = max(1, (game.true_count - 1) * initial_bet)
-
+        multiplier = 0 if game.is_time_to_shuffle else min(4, (game.true_count - 1))
+        stake = max(5, multiplier * betting_unit)
         player = Player(stake=stake)
         game.new_game(players=[player])
 
-    print(bank_hist)
-    fig, ax = plt.subplots(2, 1)
+    fig, ax = plt.subplots(2, 1, sharex=True)
     fig.suptitle('High-Low Strategy')
 
     ax[0].plot(bank_hist)
-    ax[0].set_title(f'Bank: €{initial_bank:,}. Stake: €{initial_bet:,}')
+    ax[0].set_title(f'Bank: €{initial_bank:,}. Betting Unit: €{betting_unit:,}')
     ax[0].grid()
 
     ax[1].plot(true_count_hist)
@@ -115,6 +112,5 @@ if __name__ == '__main__':
         double_after_split=args.double_after_split,
         hit_on_soft_17=args.hit_on_soft_17,
         num_decks=args.num_decks,
-        bank=1_000_000,
-        initial_bet=100,
+        bank=100_000,
     )

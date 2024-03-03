@@ -42,7 +42,7 @@ class Blackjack:
     def __setup(self) -> None:
 
         # set 0.2 as parameter or cut card
-        if len(self.shoe) / (len(self.shoe) + len(self.discarded)) < 0.2:
+        if self.is_time_to_shuffle:
             self.shuffle()
 
         if self.is_finished:
@@ -69,6 +69,10 @@ class Blackjack:
                 self.stand()
             self.hit_dealer()
             self.is_finished = True
+
+    @property
+    def is_time_to_shuffle(self):
+        return len(self.shoe) / (len(self.shoe) + len(self.discarded)) < 0.2
 
     def shuffle(self):
         self.shoe = list(self.CARDS) * self.n_packs * 4
