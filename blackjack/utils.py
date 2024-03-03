@@ -1,10 +1,28 @@
 import os
 from dataclasses import dataclass
 from enum import Enum
+from blackjack.hand import Hand
 
 BASE_PATH = os.path.dirname(os.path.abspath(__file__))
 DATA_PATH = os.path.join(BASE_PATH, 'data')
 
+
+def format_hand(hand: Hand):
+    if hand.is_splittable:
+        player_hand = str(hand)
+
+        if player_hand.isnumeric():
+            player_hand = int(player_hand)
+
+        if player_hand == 'AA':
+            player_hand = 12
+
+    elif hand.is_soft_value:
+        player_hand = hand.get_string_rep()
+    else:
+        player_hand = hand.value()
+
+    return player_hand
 
 def card2rank(c):
     if 2 <= c <= 9:
