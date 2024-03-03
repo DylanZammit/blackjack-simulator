@@ -95,6 +95,7 @@ print(f'Player Profit = €{player.profit}')
 
 <details>
 <summary>Output</summary>
+```
 ******************************
 Dealer Hand: [J, T] (20)
 (LOST) Player 0 Hand: [K, 9] (19)
