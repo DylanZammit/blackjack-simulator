@@ -134,43 +134,43 @@ The latter gives the expected value of the hand assuming €1 is played.
 **NOTE**: Only DAS works at the time of writing.
 
 ## Optimal Strategy
-| **Player \ Dealer** |  **2** |  **3** |  **4** |  **5** |  **6** |  **7** |  **8** |  **9** | **10** | **11** |
+| **Player \ Dealer** |  **2** |  **3** |  **4** |  **5** |  **6** |  **7** |  **8** |  **9** | **10** | **A**  |
 |---------------------|:------:|:------:|:------:|:------:|:------:|:------:|:------:|:------:|:------:|:------:|
-|        **2**        | hit    | hit    | hit    | hit    | hit    | hit    | hit    | hit    | hit    | hit    |
-|        **3**        | hit    | hit    | hit    | hit    | hit    | hit    | hit    | hit    | hit    | hit    |
-|        **4**        | hit    | hit    | hit    | hit    | hit    | hit    | hit    | hit    | hit    | hit    |
-|        **5**        | hit    | hit    | hit    | hit    | hit    | hit    | hit    | hit    | hit    | hit    |
-|        **6**        | hit    | hit    | hit    | hit    | hit    | hit    | hit    | hit    | hit    | hit    |
-|        **7**        | hit    | hit    | hit    | hit    | hit    | hit    | hit    | hit    | hit    | hit    |
-|        **8**        | hit    | hit    | hit    | hit    | hit    | hit    | hit    | hit    | hit    | hit    |
-|        **9**        | hit    | double | double | double | double | hit    | hit    | hit    | hit    | hit    |
-|        **10**       | double | double | double | double | double | double | double | double | hit    | hit    |
+|        **2**        | hit    | hit    | hit    | hit    | hit    | hit    | hit    | hit    | hit    |  hit   |
+|        **3**        | hit    | hit    | hit    | hit    | hit    | hit    | hit    | hit    | hit    |  hit   |
+|        **4**        | hit    | hit    | hit    | hit    | hit    | hit    | hit    | hit    | hit    |  hit   |
+|        **5**        | hit    | hit    | hit    | hit    | hit    | hit    | hit    | hit    | hit    |  hit   |
+|        **6**        | hit    | hit    | hit    | hit    | hit    | hit    | hit    | hit    | hit    |  hit   |
+|        **7**        | hit    | hit    | hit    | hit    | hit    | hit    | hit    | hit    | hit    |  hit   |
+|        **8**        | hit    | hit    | hit    | hit    | hit    | hit    | hit    | hit    | hit    |  hit   |
+|        **9**        | hit    | double | double | double | double | hit    | hit    | hit    | hit    |  hit   |
+|        **10**       | double | double | double | double | double | double | double | double | hit    |  hit   |
 |        **11**       | double | double | double | double | double | double | double | double | double | double |
-|        **12**       | hit    | hit    | stand  | stand  | stand  | hit    | hit    | hit    | hit    | hit    |
-|        **13**       | stand  | stand  | stand  | stand  | stand  | hit    | hit    | hit    | hit    | hit    |
-|        **14**       | stand  | stand  | stand  | stand  | stand  | hit    | hit    | hit    | hit    | hit    |
-|        **15**       | stand  | stand  | stand  | stand  | stand  | hit    | hit    | hit    | hit    | hit    |
-|        **16**       | stand  | stand  | stand  | stand  | stand  | hit    | hit    | hit    | hit    | hit    |
+|        **12**       | hit    | hit    | stand  | stand  | stand  | hit    | hit    | hit    | hit    |  hit   |
+|        **13**       | stand  | stand  | stand  | stand  | stand  | hit    | hit    | hit    | hit    |  hit   |
+|        **14**       | stand  | stand  | stand  | stand  | stand  | hit    | hit    | hit    | hit    |  hit   |
+|        **15**       | stand  | stand  | stand  | stand  | stand  | hit    | hit    | hit    | hit    |  hit   |
+|        **16**       | stand  | stand  | stand  | stand  | stand  | hit    | hit    | hit    | hit    |  hit   |
 |        **17**       | stand  | stand  | stand  | stand  | stand  | stand  | stand  | stand  | stand  | stand  |
 |        **18**       | stand  | stand  | stand  | stand  | stand  | stand  | stand  | stand  | stand  | stand  |
 |        **19**       | stand  | stand  | stand  | stand  | stand  | stand  | stand  | stand  | stand  | stand  |
 |        **20**       | stand  | stand  | stand  | stand  | stand  | stand  | stand  | stand  | stand  | stand  |
 |        **21**       | stand  | stand  | stand  | stand  | stand  | stand  | stand  | stand  | stand  | stand  |
-|       **2,2**       | split  | split  | split  | split  | split  | split  | hit    | hit    | hit    | hit    |
-|       **3,3**       | split  | split  | split  | split  | split  | split  | hit    | hit    | hit    | hit    |
-|       **4,4**       | hit    | hit    | hit    | split  | split  | hit    | hit    | hit    | hit    | hit    |
-|       **5,5**       | double | double | double | double | double | double | double | double | hit    | hit    |
-|       **6,6**       | split  | split  | split  | split  | split  | hit    | hit    | hit    | hit    | hit    |
-|       **7,7**       | split  | split  | split  | split  | split  | split  | hit    | hit    | hit    | hit    |
+|       **2,2**       | split  | split  | split  | split  | split  | split  | hit    | hit    | hit    |  hit   |
+|       **3,3**       | split  | split  | split  | split  | split  | split  | hit    | hit    | hit    |  hit   |
+|       **4,4**       | hit    | hit    | hit    | split  | split  | hit    | hit    | hit    | hit    |  hit   |
+|       **5,5**       | double | double | double | double | double | double | double | double | hit    |  hit   |
+|       **6,6**       | split  | split  | split  | split  | split  | hit    | hit    | hit    | hit    |  hit   |
+|       **7,7**       | split  | split  | split  | split  | split  | split  | hit    | hit    | hit    |  hit   |
 |       **8,8**       | split  | split  | split  | split  | split  | split  | split  | split  | split  | split  |
 |       **9,9**       | split  | split  | split  | split  | split  | stand  | split  | split  | stand  | stand  |
 |       **T,T**       | stand  | stand  | stand  | stand  | stand  | stand  | stand  | stand  | stand  | stand  |
-|       **A,2**       | hit    | hit    | hit    | double | double | hit    | hit    | hit    | hit    | hit    |
-|       **A,3**       | hit    | hit    | hit    | double | double | hit    | hit    | hit    | hit    | hit    |
-|       **A,4**       | hit    | hit    | double | double | double | hit    | hit    | hit    | hit    | hit    |
-|       **A,5**       | hit    | hit    | double | double | double | hit    | hit    | hit    | hit    | hit    |
-|       **A,6**       | hit    | double | double | double | double | hit    | hit    | hit    | hit    | hit    |
-|       **A,7**       | double | double | double | double | double | stand  | stand  | hit    | hit    | hit    |
+|       **A,2**       | hit    | hit    | hit    | double | double | hit    | hit    | hit    | hit    |  hit   |
+|       **A,3**       | hit    | hit    | hit    | double | double | hit    | hit    | hit    | hit    |  hit   |
+|       **A,4**       | hit    | hit    | double | double | double | hit    | hit    | hit    | hit    |  hit   |
+|       **A,5**       | hit    | hit    | double | double | double | hit    | hit    | hit    | hit    |  hit   |
+|       **A,6**       | hit    | double | double | double | double | hit    | hit    | hit    | hit    |  hit   |
+|       **A,7**       | double | double | double | double | double | stand  | stand  | hit    | hit    |  hit   |
 |       **A,8**       | stand  | stand  | stand  | stand  | double | stand  | stand  | stand  | stand  | stand  |
 |       **A,9**       | stand  | stand  | stand  | stand  | stand  | stand  | stand  | stand  | stand  | stand  |
 |       **A,A**       | split  | split  | split  | split  | split  | split  | split  | split  | split  | split  |
