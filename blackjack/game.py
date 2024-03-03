@@ -43,20 +43,23 @@ class Blackjack:
                 for card in hand.cards:
                     self.shoe.remove(str(card))
 
+            if len(self.dealer.hand) == 1:
+                self.dealer.hand.deal_card(next(self.draw))
+
         else:
             self.players = [Player(i) for i in range(n_players)]
             self.__setup()
 
+        self.is_finished = False
         if self.dealer.hand.is_blackjack:
-            while not self.is_finished:
+            while self.next_hand() is not None:
                 self.stand()
             self.hit_dealer()
+            self.is_finished = True
 
         self.player_name_map = {p.name: p for p in self.players}
         self.player_turn = 0
         self.current_player = self.players[0]
-
-        self.is_finished = False
 
     @property
     def game_round(self):
@@ -69,8 +72,7 @@ class Blackjack:
             for hand in player.hands:
                 if hand.round < self.game_round and hand.status.value == GameState.LIVE:
                     return hand
-        print('Dealer\'s turn!')
-        print(self)
+        # print('Dealer\'s turn!')
 
     def hands(self) -> Generator[Hand, None, None]:
         for player in self.players:
@@ -139,7 +141,6 @@ class Blackjack:
 
     def hit(self) -> None:
         hand = self.next_hand()
-
         if hand is None:
             return
 

@@ -117,6 +117,6 @@ if __name__ == '__main__':
         double_after_split=args.double_after_split,
         hit_on_soft_17=args.hit_on_soft_17,
         num_decks=args.num_decks,
-        bank=1000,
-        initial_bet=1,
+        bank=1_000_000,
+        initial_bet=100,
     )

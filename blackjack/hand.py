@@ -66,7 +66,7 @@ class Hand:
 
     @property
     def is_blackjack(self) -> bool:
-        return len(self) == 2 and self.value == 21 and not self.is_split
+        return len(self) == 2 and self.value() == 21 and not self.is_split
 
     @property
     def is_splittable(self) -> bool:

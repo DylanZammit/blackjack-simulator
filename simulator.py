@@ -68,8 +68,9 @@ def simulate_game(
         double_after_split=double_after_split,
         hit_on_soft_17=hit_on_soft_17,
     )
-    dealer_hand = game.dealer.hand.value()
-
+    dealer_hand = game.dealer.hand.cards[0].value
+    dealer_hand = dealer_hand if isinstance(dealer_hand, int) else 11
+    # if game.dealer.hand.value() == 21: breakpoint()
     if not game.is_finished:
 
         if decision is not None:
@@ -108,6 +109,7 @@ def simulate_game(
         print(game)
         for player in game.players:
             print(f'Player {player.name}:', player.decision_hist)
+            print(f'Profit = €{player.profit}, Stake = €{player.stake}')
 
     return game.players[0].profit, game.players[0].stake
 
@@ -188,6 +190,7 @@ def simulate_optimal_game(
     )
 
     if n_processes is not None:
+        raise NotImplementedError('Parallel runs not implemented for optimal games yet')
 
         n_processes = mp.cpu_count() if n_processes == -1 else n_processes
         n_batch = n_sims // n_processes + 1
@@ -195,14 +198,13 @@ def simulate_optimal_game(
         with mp.Pool(n_processes) as pool:
             res = pool.map(simulate_games_profit_partial, [n_batch] * n_processes)
 
-        raise
         profit, stake = sum(res)
     else:
         profit, stake = simulate_games_profit_partial(n_sims=n_sims)
 
     print(f'Profit = {profit}')
     print(f'Stake = {stake}')
-    print(f'Expected Value = {profit / stake : .2f}')
+    print(f'Expected Value = {profit / stake * 100: .2f}%')
 
 
 def get_basic_strategy(
@@ -315,7 +317,7 @@ def simulate_hand(
     for decision in decisions:
         print('*'*30 + str(decision) + '*'*30)
 
-        decision_profit[decision] = simulate_games_profit(
+        decision_profit[decision.value] = simulate_games_profit(
             n_sims=n_sims,
             player_hand=players,
             dealer_hand=dealer,
@@ -329,7 +331,7 @@ def simulate_hand(
             n_packs=n_packs,
         )
 
-        print('Expected Profit:', decision, decision_profit[decision] / n_sims)
+        print('Expected Profit:', decision, decision_profit[decision.value] / n_sims)
 
 
 def read_strategy(
@@ -373,23 +375,23 @@ def main(
 
         bs, ev = read_strategy(basic_strategy, expected_value)
 
+        # simulate_hand(
+        #     players=11,
+        #     dealer=10,
+        #     n_sims=1000,
+        #     quiet=False,
+        #     basic_strategy=bs,
+        #     expected_profit=ev,
+        #
+        #     double_after_split=double_after_split,
+        #     hit_on_soft_17=hit_on_soft_17,
+        #     n_packs=n_packs,
+        # )
+
         simulate_hand(
             players=11,
             dealer=11,
-            n_sims=1000,
-            quiet=False,
-            basic_strategy=bs,
-            expected_profit=ev,
-
-            double_after_split=double_after_split,
-            hit_on_soft_17=hit_on_soft_17,
-            n_packs=n_packs,
-        )
-
-        simulate_hand(
-            players=11,
-            dealer=11,
-            n_sims=100000,
+            n_sims=10000,
             quiet=True,
             basic_strategy=bs,
             expected_profit=ev,
