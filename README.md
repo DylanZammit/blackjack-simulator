@@ -195,9 +195,6 @@ unning the above command and generating the optimal strategies, we obtain the fo
 
 | **Player \ Dealer** |  **2** |  **3** |  **4** |  **5** |  **6** |  **7** |  **8** |  **9** | **10** | **A**  |
 |---------------------|:------:|:------:|:------:|:------:|:------:|:------:|:------:|:------:|:------:|:------:|
-|        **2**        | hit    | hit    | hit    | hit    | hit    | hit    | hit    | hit    | hit    |  hit   |
-|        **3**        | hit    | hit    | hit    | hit    | hit    | hit    | hit    | hit    | hit    |  hit   |
-|        **4**        | hit    | hit    | hit    | hit    | hit    | hit    | hit    | hit    | hit    |  hit   |
 |        **5**        | hit    | hit    | hit    | hit    | hit    | hit    | hit    | hit    | hit    |  hit   |
 |        **6**        | hit    | hit    | hit    | hit    | hit    | hit    | hit    | hit    | hit    |  hit   |
 |        **7**        | hit    | hit    | hit    | hit    | hit    | hit    | hit    | hit    | hit    |  hit   |
