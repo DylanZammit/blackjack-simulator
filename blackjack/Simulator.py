@@ -40,6 +40,14 @@ class Simulation:
         self.bank_hist = []
         self.true_count_hist = []
 
+        self.total_stake = 0
+        self.total_profit = 0
+
+    @property
+    def house_edge(self):
+        edge = self.total_profit / self.total_stake
+        return edge
+
     def strategy(self, player_hand: Hand, dealer_hand: int) -> GameDecision:
         if self.basic_strategy is None:
             err_msg = 'Must provide a basic strategy, otherwise override this method with a customer strategy'
@@ -74,6 +82,10 @@ class Simulation:
             game.hit_dealer()
 
             self.bank += self.player.profit
+
+            self.total_stake += self.player.stake
+            self.total_profit += self.player.profit
+
             self.bank = max(0, self.bank)  # technically not the right way to do this
 
             self.bank_hist.append(self.bank)

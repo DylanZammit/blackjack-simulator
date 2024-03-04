@@ -52,6 +52,8 @@ if __name__ == '__main__':
     initial_bet = args.stake
     bank_hists = []
 
+    house_edge = 0
+
     ax = None
     for i in range(args.num_games):
         print(f'Sim {i}')
@@ -68,10 +70,14 @@ if __name__ == '__main__':
         ax = plt.plot(sim.bank_hist, color='black', alpha=0.2)
         bank_hists.append(sim.bank_hist)
 
+        house_edge += sim.house_edge
+
     df_hists = pd.DataFrame(bank_hists)
     df_hists.mean().plot(color='red', alpha=1)
 
-    plt.title('Basic Strategy')
+    house_edge = house_edge / args.num_games * 100
+
+    plt.title(f'Basic Strategy (House Edge: {house_edge:.2f}%)')
     plt.suptitle(f'Bank: €{initial_bank:,}. Stake: €{initial_bet:,}')
     plt.grid()
     plt.show()

@@ -198,8 +198,8 @@ class Blackjack:
 
         assert hand.is_splittable, f'Cannot Split {hand}!'
 
-        old_hand = Hand([hand.cards[0]], is_split=True, player_name=hand.player_name)
-        new_hand = Hand([hand.cards[0]], is_split=True, player_name=hand.player_name)
+        old_hand = Hand([hand.cards[0]], is_split=True, player_name=hand.player_name, stake=hand.stake)
+        new_hand = Hand([hand.cards[0]], is_split=True, player_name=hand.player_name, stake=hand.stake)
         old_hand.round = self.game_round
         new_hand.round = self.game_round
 

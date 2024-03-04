@@ -11,9 +11,9 @@ pd.set_option('display.max_rows', None)
 class HighLow(Simulation):
 
     def get_stake(self) -> int:
-        betting_unit = self.initial_bank // 1000
+        betting_unit = self.bank // 100
         multiplier = 0 if self.game.is_time_to_shuffle else min(4, (self.game.true_count - 1))
-        stake = max(1, multiplier * betting_unit)
+        stake = max(self.initial_bet, multiplier * betting_unit)
         return stake
 
 
@@ -29,12 +29,12 @@ if __name__ == '__main__':
     parser.add_argument("-H17", "--hit_on_soft_17", action='store_true',
                         help="Dealer hits on soft 17")
     parser.add_argument("-nd", "--num_decks", type=int,
-                        help="Number of decks in the shoe", default=6)
+                        help="Number of decks in the shoe [def=6]", default=6)
 
     parser.add_argument("-br", "--bankroll", type=int,
-                        help="Bank amount of player [def=1000]", default=1000)
+                        help="Bank amount of player [def=10000]", default=100_000)
     parser.add_argument("-s", "--stake", type=int,
-                        help="Initial stake [def=10]", default=5)
+                        help="Initial stake [def=10]", default=1)
     parser.add_argument("-rpg", "--rounds_per_game", type=int,
                         help="Rounds per game to play [def=1000]", default=1000)
     parser.add_argument("-n", "--num_games", type=int,
@@ -53,10 +53,9 @@ if __name__ == '__main__':
 
     initial_bank = args.bankroll
     initial_bet = args.stake
-    betting_unit = initial_bank // 1000
+    betting_unit = initial_bank // 100
 
     fig, ax = plt.subplots(2, 1, sharex=True)
-    fig.suptitle('High-Low Strategy')
 
     ax[0].set_title(f'Bank: €{initial_bank:,}. Betting Unit: €{betting_unit:,}')
     ax[0].grid()
@@ -65,11 +64,11 @@ if __name__ == '__main__':
     ax[1].grid()
 
     bank_hists = []
+    house_edge = 0
 
-    for i in range(1, 101):
+    for i in range(args.num_games):
         print(f'Sim {i}')
         sim = HighLow(
-
             rounds_per_game=args.rounds_per_game,
             basic_strategy=bs,
             double_after_split=args.double_after_split,
@@ -82,8 +81,12 @@ if __name__ == '__main__':
         ax[0].plot(sim.bank_hist, color='black', alpha=0.2)
         ax[1].plot(sim.true_count_hist, color='black', alpha=0.1)
         bank_hists.append(sim.bank_hist)
+        house_edge += sim.house_edge
+
+    house_edge = house_edge / args.num_games * 100
+    fig.suptitle(f'High-Low Strategy: (House Edge: {house_edge:.2f}%)')
 
     df_hists = pd.DataFrame(bank_hists)
-    df_hists.mean().plot(ax=ax[0], color='red', alpha=1)
+    df_hists.mean().plot(ax=ax[0], color='red', alpha=1, grid=True)
 
     plt.show()
