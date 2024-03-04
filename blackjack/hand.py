@@ -116,7 +116,7 @@ class Hand:
         return self.value() > other.value() or self.is_blackjack and not other.is_blackjack
 
 
-def format_hand(hand: Hand):
+def format_hand(hand: Hand) -> str | int:
     if hand.is_splittable:
         player_hand = str(hand)
 

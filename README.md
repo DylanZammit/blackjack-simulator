@@ -106,6 +106,58 @@ Player Profit = €-2
 ```
 </details>
 
+Alternatively, you can override the `strategy` and `get_stake` methods of `blackjack.Simulator.Simulation` class as follows
+
+```python
+from blackjack.Simulator import Simulation, GameDecision, Hand
+
+class SomeStrategy(Simulation):
+    def strategy(self, player_hand: Hand, dealer_hand: int) -> GameDecision:
+        if player_hand.is_splittable:
+            decision = GameDecision.SPLIT
+        elif player_hand.value() >= 17:
+            decision = GameDecision.STAND
+        elif 12 <= player_hand.value() < 17:
+            decision = GameDecision.HIT
+        elif 10 <= player_hand.value() < 12:
+            decision = GameDecision.DOUBLE
+        elif player_hand.value() < 10:
+            decision = GameDecision.HIT
+        else:
+            raise ValueError('Hand value is not possible!')
+        return decision
+    
+    def get_stake(self) -> int:
+        return self.initial_bet
+    
+sim = SomeStrategy(
+        rounds_per_game=1,
+        double_after_split=True,
+        hit_on_soft_17=True,
+        n_packs=6,
+        initial_bank=1,
+        initial_bet=1,
+    )
+
+sim.run()
+
+print(sim.game)
+print(f'Player Stake = €{sim.player.stake}')
+print(f'Player Profit = €{sim.player.profit}')
+```
+
+<details>
+<summary>Output</summary>
+
+```
+******************************
+Dealer Hand: [5, 4] (9)
+(LIVE) Player 0 Hand: [7, 6] (13)
+Player Stake = €1
+Player Profit = €0
+```
+</details>
+
 ### Generating Basic Strategy
 Before generating the optimal strategy, i.e. the one that maximises the player's return and minimises the house edge, the rules of the game must be decided. During development, the following rules were assumed:
 * Doubling After Splitting (DAS) is allowed,

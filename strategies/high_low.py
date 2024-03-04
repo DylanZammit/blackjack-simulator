@@ -1,7 +1,4 @@
-from blackjack.utils import GameDecision
-from blackjack.hand import format_hand
-from blackjack.game import Blackjack
-from blackjack.player import Player
+from blackjack.Simulator import Simulation
 import matplotlib.pyplot as plt
 import pandas as pd
 import json
@@ -11,74 +8,13 @@ pd.set_option('display.max_columns', None)
 pd.set_option('display.max_rows', None)
 
 
-def high_low(
-    basic_strategy: dict = None,
-    double_after_split: bool = True,
-    hit_on_soft_17: bool = True,
-    num_decks: bool = 6,
+class HighLow(Simulation):
 
-    bank: int = 100_000,
-    low_stake: int = 5,
-):
-
-    initial_bank = bank
-    bank_hist = [bank]
-    true_count_hist = [0]
-
-    n_games = 0
-    betting_unit = bank // 1000
-
-    player = Player(stake=low_stake)
-    game = Blackjack(
-        players=[player],
-        n_packs=num_decks,
-        double_after_split=double_after_split,
-        hit_on_soft_17=hit_on_soft_17,
-    )
-
-    while abs((bank - initial_bank) / initial_bank * 100) < 5:
-
-        dealer_hand = game.dealer.hand.cards[0].value
-        dealer_hand = dealer_hand if isinstance(dealer_hand, int) else 11
-
-        while not game.is_dealer_turn:
-            hand = game.next_hand()
-            player_hand = format_hand(hand)
-
-            opt_decision = basic_strategy[(player_hand, dealer_hand)]
-
-            # Can only double on first two cards. Hit otherwise
-            if opt_decision == GameDecision.DOUBLE and len(hand) != 2:
-                opt_decision = GameDecision.HIT.value
-
-            getattr(game, opt_decision)()
-
-        game.hit_dealer()
-
-        bank += player.profit
-        bank = max(0, bank)  # technically not the right way to do this
-        bank_hist.append(bank)
-        true_count_hist.append(game.true_count)
-
-        n_games += 1
-
-        multiplier = 0 if game.is_time_to_shuffle else min(4, (game.true_count - 1))
-        stake = max(5, multiplier * betting_unit)
-        player = Player(stake=stake)
-        game.new_game(players=[player])
-
-    fig, ax = plt.subplots(2, 1, sharex=True)
-    fig.suptitle('High-Low Strategy')
-
-    ax[0].plot(bank_hist)
-    ax[0].set_title(f'Bank: €{initial_bank:,}. Betting Unit: €{betting_unit:,}')
-    ax[0].grid()
-
-    ax[1].plot(true_count_hist)
-    ax[1].set_title('True Count')
-    ax[1].grid()
-
-    plt.show()
+    def get_stake(self) -> int:
+        betting_unit = self.initial_bank // 1000
+        multiplier = 0 if self.game.is_time_to_shuffle else min(4, (self.game.true_count - 1))
+        stake = max(1, multiplier * betting_unit)
+        return stake
 
 
 if __name__ == '__main__':
@@ -95,6 +31,14 @@ if __name__ == '__main__':
     parser.add_argument("-nd", "--num_decks", type=int,
                         help="Number of decks in the shoe", default=6)
 
+    parser.add_argument("-br", "--bankroll", type=int,
+                        help="Bank amount of player [def=1000]", default=1000)
+    parser.add_argument("-s", "--stake", type=int,
+                        help="Initial stake [def=10]", default=5)
+    parser.add_argument("-rpg", "--rounds_per_game", type=int,
+                        help="Rounds per game to play [def=1000]", default=1000)
+    parser.add_argument("-n", "--num_games", type=int,
+                        help="Number of games to play [def=100]", default=100)
     args = parser.parse_args()
 
     df_bs = pd.read_csv(args.basic_strategy, index_col=0)
@@ -107,10 +51,39 @@ if __name__ == '__main__':
         for player, decision in player_decision.items()
     }
 
-    high_low(
-        basic_strategy=bs,
-        double_after_split=args.double_after_split,
-        hit_on_soft_17=args.hit_on_soft_17,
-        num_decks=args.num_decks,
-        bank=100_000,
-    )
+    initial_bank = args.bankroll
+    initial_bet = args.stake
+    betting_unit = initial_bank // 1000
+
+    fig, ax = plt.subplots(2, 1, sharex=True)
+    fig.suptitle('High-Low Strategy')
+
+    ax[0].set_title(f'Bank: €{initial_bank:,}. Betting Unit: €{betting_unit:,}')
+    ax[0].grid()
+
+    ax[1].set_title('True Count')
+    ax[1].grid()
+
+    bank_hists = []
+
+    for i in range(1, 101):
+        print(f'Sim {i}')
+        sim = HighLow(
+
+            rounds_per_game=args.rounds_per_game,
+            basic_strategy=bs,
+            double_after_split=args.double_after_split,
+            hit_on_soft_17=args.hit_on_soft_17,
+            n_packs=args.num_decks,
+            initial_bank=initial_bank,
+            initial_bet=initial_bet,
+        ).run()
+
+        ax[0].plot(sim.bank_hist, color='black', alpha=0.2)
+        ax[1].plot(sim.true_count_hist, color='black', alpha=0.1)
+        bank_hists.append(sim.bank_hist)
+
+    df_hists = pd.DataFrame(bank_hists)
+    df_hists.mean().plot(ax=ax[0], color='red', alpha=1)
+
+    plt.show()

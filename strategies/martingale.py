@@ -1,7 +1,4 @@
-from blackjack.utils import GameDecision
-from blackjack.hand import format_hand
-from blackjack.game import Blackjack
-from blackjack.player import Player
+from blackjack.Simulator import Simulation
 import matplotlib.pyplot as plt
 import pandas as pd
 import json
@@ -11,61 +8,10 @@ pd.set_option('display.max_columns', None)
 pd.set_option('display.max_rows', None)
 
 
-def martingale(
-    basic_strategy: dict = None,
-    double_after_split: bool = True,
-    hit_on_soft_17: bool = True,
-    num_decks: bool = 6,
+class Martingale(Simulation):
 
-    bank: int = 100000,
-    initial_bet: int = 10,
-):
-
-    initial_bank = bank
-    bank_hist = [bank]
-
-    n_consecutive_losses = 0
-    n_games = 0
-    while bank > 0:
-        stake_amount = min(2 ** n_consecutive_losses * initial_bet, bank)
-        player = Player(stake=stake_amount)
-        game = Blackjack(
-            players=[player],
-            n_packs=num_decks,
-            double_after_split=double_after_split,
-            hit_on_soft_17=hit_on_soft_17,
-        )
-
-        dealer_hand = game.dealer.hand.cards[0].value
-        dealer_hand = dealer_hand if isinstance(dealer_hand, int) else 11
-
-        while not game.is_dealer_turn:
-            hand = game.next_hand()
-            player_hand = format_hand(hand)
-
-            opt_decision = basic_strategy[(player_hand, dealer_hand)]
-
-            # Can only double on first two cards. Hit otherwise
-            if opt_decision == GameDecision.DOUBLE and len(hand) != 2:
-                opt_decision = GameDecision.HIT.value
-
-            getattr(game, opt_decision)()
-
-        game.hit_dealer()
-
-        bank += player.profit
-        bank = max(0, bank)  # technically not the right way to do this
-        bank_hist.append(bank)
-
-        n_games += 1
-        n_consecutive_losses = 0 if player.profit > 0 else (n_consecutive_losses + 1)
-
-    print(bank_hist)
-    plt.plot(bank_hist)
-    plt.title('Martingale Strategy')
-    plt.suptitle(f'Bank: €{initial_bank:,}. Stake: €{initial_bet:,}')
-    plt.grid()
-    plt.show()
+    def get_stake(self) -> int:
+        return min(2 ** self.n_consecutive_losses * self.initial_bet, self.bank)
 
 
 if __name__ == '__main__':
@@ -80,7 +26,15 @@ if __name__ == '__main__':
     parser.add_argument("-H17", "--hit_on_soft_17", action='store_true',
                         help="Dealer hits on soft 17")
     parser.add_argument("-nd", "--num_decks", type=int,
-                        help="Number of decks in the shoe", default=6)
+                        help="Number of decks in the shoe [def=6]", default=6)
+    parser.add_argument("-br", "--bankroll", type=int,
+                        help="Bank amount of player [def=1000]", default=1000)
+    parser.add_argument("-s", "--stake", type=int,
+                        help="Initial stake [def=10]", default=10)
+    parser.add_argument("-rpg", "--rounds_per_game", type=int,
+                        help="Rounds per game to play [def=1000]", default=1000)
+    parser.add_argument("-n", "--num_games", type=int,
+                        help="Number of games to play [def=100]", default=100)
 
     args = parser.parse_args()
 
@@ -94,11 +48,31 @@ if __name__ == '__main__':
         for player, decision in player_decision.items()
     }
 
-    martingale(
-        basic_strategy=bs,
-        double_after_split=args.double_after_split,
-        hit_on_soft_17=args.hit_on_soft_17,
-        num_decks=args.num_decks,
-        bank=1_000_000,
-        initial_bet=100,
-    )
+    initial_bank = args.bankroll
+    initial_bet = args.stake
+    bank_hists = []
+
+    ax = None
+    for i in range(args.num_games):
+        print(f'Sim {i}')
+        sim = Martingale(
+            rounds_per_game=args.rounds_per_game,
+            basic_strategy=bs,
+            double_after_split=args.double_after_split,
+            hit_on_soft_17=args.hit_on_soft_17,
+            n_packs=args.num_decks,
+            initial_bank=initial_bank,
+            initial_bet=initial_bet,
+        ).run()
+
+        ax = plt.plot(sim.bank_hist, color='black', alpha=0.2)
+        bank_hists.append(sim.bank_hist)
+
+    df_hists = pd.DataFrame(bank_hists)
+    df_hists.mean().plot(color='red', alpha=1)
+
+    plt.title('Martingale Strategy')
+    plt.suptitle(f'Bank: €{initial_bank:,}. Stake: €{initial_bet:,}')
+    plt.grid()
+    plt.show()
+
