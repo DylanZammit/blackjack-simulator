@@ -106,7 +106,12 @@ Player Profit = €-2
 ```
 </details>
 
-Alternatively, you can override the `strategy` and `get_stake` methods of `blackjack.Simulator.Simulation` class as follows
+Alternatively, you can override the `strategy` and `get_stake` methods of `blackjack.Simulator.Simulation`, an example of which is given below.
+If 
+* a `basic_strategy` dict is provided, containing a mapping between all player-dealer combinations and the respective play,
+* and the `strategy` method is _not_ overridden,
+
+then the strategy will be played as per the provided strategy mapping. An example of this can be found in the `basic_strategy.py` script.
 
 ```python
 from blackjack.Simulator import Simulation, GameDecision, Hand
@@ -170,7 +175,7 @@ Before generating the optimal strategy, i.e. the one that maximises the player's
 Running a simulation on such conditions and saving the output strategy can be achieved by running the following python script
 
 ```
-simulator.py \
+gen_basic_strategy.py \
     --sample 400000 \
     --processes -1 \
     --generate \
@@ -186,6 +191,8 @@ The latter gives the expected value of the hand assuming €1 is played.
 **NOTE**: Only DAS works at the time of writing.
 
 ## Optimal Strategy
+unning the above command and generating the optimal strategies, we obtain the following mapping. This is identical to the one given by [The Wizard of Odds](https://wizardofodds.com/games/blackjack/strategy/4-decks/). 
+
 | **Player \ Dealer** |  **2** |  **3** |  **4** |  **5** |  **6** |  **7** |  **8** |  **9** | **10** | **A**  |
 |---------------------|:------:|:------:|:------:|:------:|:------:|:------:|:------:|:------:|:------:|:------:|
 |        **2**        | hit    | hit    | hit    | hit    | hit    | hit    | hit    | hit    | hit    |  hit   |
