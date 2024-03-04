@@ -381,9 +381,11 @@ def main(
 
         bs, ev = read_strategy(basic_strategy, expected_value)
 
+        ph, dh = 2, 9
+
         simulate_hand(
-            players=11,
-            dealer=11,
+            players=ph,
+            dealer=dh,
             n_sims=1000,
             quiet=False,
             basic_strategy=bs,
@@ -395,8 +397,8 @@ def main(
         )
 
         simulate_hand(
-            players=11,
-            dealer=11,
+            players=ph,
+            dealer=dh,
             n_sims=50000,
             quiet=True,
             basic_strategy=bs,

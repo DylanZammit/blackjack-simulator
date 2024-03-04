@@ -33,7 +33,7 @@ class Blackjack:
         self.dealer = Player('dealer', hand=dealer_hand)
 
         self.players = [Player(i) for i in range(n_players)] if not players else players
-        self.is_finished = False
+        self.is_finished = True
 
         self.__setup()
 
@@ -72,7 +72,7 @@ class Blackjack:
 
     @property
     def is_time_to_shuffle(self):
-        return len(self.shoe) / (len(self.shoe) + len(self.discarded)) < 0.2
+        return len(self.shoe) / (len(self.shoe) + len(self.discarded)) < 0.2 or self.is_finished
 
     def shuffle(self):
         self.shoe = list(self.CARDS) * self.n_packs * 4
