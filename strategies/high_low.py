@@ -1,8 +1,7 @@
-from blackjack.Simulator import Simulation
+from blackjack.simulator import Simulation
 import matplotlib.pyplot as plt
 import pandas as pd
-import json
-
+from blackjack.utils import csv_to_dict
 
 pd.set_option('display.max_columns', None)
 pd.set_option('display.max_rows', None)
@@ -44,27 +43,18 @@ if __name__ == '__main__':
 
     args = parser.parse_args()
 
-    df_bs = pd.read_csv(args.basic_strategy, index_col=0)
-    print(df_bs)
-    json_bs = json.loads(df_bs.to_json())
-
-    bs = {
-        (int(player) if player.isnumeric() else player, int(dealer)): decision
-        for dealer, player_decision in json_bs.items()
-        for player, decision in player_decision.items()
-    }
-
+    bs = csv_to_dict(args.basic_strategy)
     initial_bank = args.bankroll
     initial_bet = args.stake
     betting_unit = initial_bank // 100
 
-    fig, ax = plt.subplots(2, 1, sharex=True)
+    # fig, ax = plt.subplots(2, 1, sharex=True)
 
-    ax[0].set_title(f'Bank: €{initial_bank:,}. Betting Unit: €{betting_unit:,}')
-    ax[0].grid()
+    # ax[0].set_title(f'Bank: €{initial_bank:,}. Betting Unit: €{betting_unit:,}')
+    # ax[0].grid()
 
-    ax[1].set_title('True Count')
-    ax[1].grid()
+    # ax[1].set_title('True Count')
+    # ax[1].grid()
 
     bank_hists = []
     true_count_hists = []
@@ -91,12 +81,22 @@ if __name__ == '__main__':
 
     # if args.plot:
     for bh, tch in zip(bank_hists, true_count_hists):
-        ax[0].plot(bh, color='black', alpha=0.2)
-        ax[1].plot(tch, color='black', alpha=0.1)
-
-    fig.suptitle(title)
+        plt.plot(bh, color='black', alpha=0.2)
+        # ax[0].plot(bh, color='black', alpha=0.2)
+        # ax[1].plot(tch, color='black', alpha=0.1)
+    plt.title(title)
+    plt.grid()
+    # fig.suptitle(title)
 
     df_hists = pd.DataFrame(bank_hists)
-    df_hists.mean().plot(ax=ax[0], color='red', alpha=1, grid=True)
+    df_hists.mean().plot(color='red', alpha=1, grid=True)
+    # df_hists.mean().plot(ax=ax[0], color='red', alpha=1, grid=True)
+
+    plt.figure()
+
+    for bh, tch in zip(bank_hists, true_count_hists):
+        plt.plot(tch, color='black', alpha=0.2)
+    plt.grid()
+    plt.title('True Count')
 
     plt.show()

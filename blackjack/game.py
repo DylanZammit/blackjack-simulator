@@ -228,6 +228,6 @@ class Blackjack:
 
         for player in self.players:
             for hand in player.hands:
-                out.append(f'({hand.status}) Player {player.name} Hand: {hand.cards} ({hand.value()})')
+                out.append(f'({hand.status}) Player {player.name} Hand: {hand.cards} ({hand.value()})...........{hand.decision_hist}')
 
         return '\n'.join(out)

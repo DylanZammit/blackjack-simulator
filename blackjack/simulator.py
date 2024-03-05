@@ -45,7 +45,7 @@ class Simulation:
 
     @property
     def house_edge(self):
-        edge = self.total_profit / self.total_stake
+        edge = - self.total_profit / self.total_stake
         return edge
 
     def strategy(self, player_hand: Hand, dealer_hand: int) -> GameDecision:
@@ -55,13 +55,16 @@ class Simulation:
 
         player_hand_fmt = format_hand(player_hand)
 
-        opt_decision_str = self.basic_strategy[(player_hand_fmt, dealer_hand)]
-        opt_decision = GameDecision(opt_decision_str)
+        opt_decision = GameDecision(self.basic_strategy[(player_hand_fmt, dealer_hand)])
 
-        # Can only double on first two cards. Hit otherwise
+        # Can only double on first two cards
+        # Using known optimal decisions if double not allowed
         if opt_decision.value == GameDecision.DOUBLE and len(player_hand) != 2:
-            opt_decision = GameDecision.HIT
-
+            # TODO: Cater for this case in basic strategy generation
+            if not player_hand.is_soft_value or player_hand.value() <= 17:
+                opt_decision = GameDecision.HIT
+            else:
+                opt_decision = GameDecision.STAND
         return opt_decision
 
     def get_stake(self) -> int:
@@ -81,12 +84,11 @@ class Simulation:
 
             game.hit_dealer()
 
-            self.bank += self.player.profit
-
             self.total_stake += self.player.stake
             self.total_profit += self.player.profit
 
-            self.bank = max(0, self.bank)  # technically not the right way to do this
+            # technically not the right way to do this
+            self.bank = max(0, self.bank + self.player.profit)
 
             self.bank_hist.append(self.bank)
             self.true_count_hist.append(game.true_count)

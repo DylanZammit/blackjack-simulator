@@ -29,6 +29,16 @@ def get_best_decision(x: dict, n_sims: int) -> tuple[GameDecision, float]:
     return max(x, key=x.get), max(x.values()) / n_sims
 
 
+def dealer_num2rank(dealer_hand: int) -> str:
+    if dealer_hand == 10:
+        dh = 'T'
+    elif dealer_hand == 11:
+        dh = 'A'
+    else:
+        dh = str(dealer_hand)
+    return dh
+
+
 def simulate_game(
         player_hand: str | int = None,  # only pass int if you have the value. Should change this
         dealer_hand: int = None,
@@ -43,25 +53,11 @@ def simulate_game(
 
     ph, dh = None, None
     if player_hand is not None:
-        if isinstance(player_hand, int):
-            if player_hand in count_2combinations:
-                player_hand = choice(count_2combinations[player_hand])
-            elif player_hand == 20:
-                player_hand = '884'
-            elif player_hand == 21:
-                player_hand = '993'
-            else:
-                player_hand = str(player_hand)
+        player_hand = choice(count_2combinations.get(player_hand, [player_hand]))
         ph = Hand(player_hand, player_name=0)
 
     if dealer_hand is not None:
-        if dealer_hand == 10:
-            dh = 'T'
-        elif dealer_hand == 11:
-            dh = 'A'
-        else:
-            dh = str(dealer_hand)
-        dh = Hand(dh)
+        dh = Hand(dealer_num2rank(dealer_hand))
 
     player = Player(hand=ph, stake=1, name=0)
     game = Blackjack(
@@ -92,18 +88,22 @@ def simulate_game(
                 ev_max = expected_profit[(max_val, dealer_hand)]
 
                 val = min_val if ev_min > ev_max else max_val
-                opt_decision = basic_strategy[(val, dealer_hand)]
-            elif decision == GameDecision.SPLIT and hand.get_string_rep() == player_hand:
+                opt_decision = GameDecision(basic_strategy[(val, dealer_hand)])
+            elif decision == GameDecision.SPLIT and hand.is_splittable:
                 # Always resplit if you think it is optimal
-                opt_decision = GameDecision.SPLIT.value
+                opt_decision = GameDecision.SPLIT
             else:
-                opt_decision = basic_strategy[(hand.value(), dealer_hand)]
+                opt_decision = GameDecision(basic_strategy[(hand.value(), dealer_hand)])
 
             # Can only double on first two cards. Hit otherwise
-            if opt_decision == GameDecision.DOUBLE and len(hand) != 2:
-                opt_decision = GameDecision.HIT.value
+            if opt_decision.value == GameDecision.DOUBLE and len(hand) != 2:
+                # TODO: Cater for this case in basic strategy generation
+                if not hand.is_soft_value or hand.value() <= 17:
+                    opt_decision = GameDecision.HIT
+                else:
+                    opt_decision = GameDecision.STAND
 
-            action = getattr(game, opt_decision)
+            action = getattr(game, opt_decision.value)
             action()
 
         game.hit_dealer()
@@ -111,10 +111,6 @@ def simulate_game(
     if not quiet:
         print(game)
         for player in game.players:
-            if game.dealer.hand.is_blackjack:
-                for hand in player.hands:
-                    hand.stake = 1
-            print(f'Player {player.name}:', player.decision_hist)
             print(f'Profit = €{player.profit}, Stake = €{player.stake}')
 
     return game.players[0].profit, game.players[0].stake
@@ -316,7 +312,7 @@ def simulate_hand(
 ) -> None:
 
     decisions = [GameDecision.STAND, GameDecision.HIT, GameDecision.DOUBLE]
-    if isinstance(players, str) and len(players) == 2:
+    if isinstance(players, str) and len(set(players)) == 1:
         decisions.append(GameDecision.SPLIT)
 
     decision_profit = {}
@@ -381,7 +377,7 @@ def main(
 
         bs, ev = read_strategy(basic_strategy, expected_value)
 
-        ph, dh = 2, 9
+        ph, dh = '44', 11
 
         simulate_hand(
             players=ph,

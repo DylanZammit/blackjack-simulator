@@ -123,9 +123,6 @@ def format_hand(hand: Hand) -> str | int:
         if player_hand.isnumeric():
             player_hand = int(player_hand)
 
-        if player_hand == 'AA':
-            player_hand = 12
-
     elif hand.is_soft_value:
         player_hand = hand.get_string_rep()
     else:

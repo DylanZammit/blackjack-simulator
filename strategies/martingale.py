@@ -1,7 +1,7 @@
-from blackjack.Simulator import Simulation
+from blackjack.simulator import Simulation
+from blackjack.utils import csv_to_dict
 import matplotlib.pyplot as plt
 import pandas as pd
-import json
 
 
 pd.set_option('display.max_columns', None)
@@ -38,15 +38,7 @@ if __name__ == '__main__':
 
     args = parser.parse_args()
 
-    df_bs = pd.read_csv(args.basic_strategy, index_col=0)
-    print(df_bs)
-    json_bs = json.loads(df_bs.to_json())
-
-    bs = {
-        (int(player) if player.isnumeric() else player, int(dealer)): decision
-        for dealer, player_decision in json_bs.items()
-        for player, decision in player_decision.items()
-    }
+    bs = csv_to_dict(args.basic_strategy)
 
     initial_bank = args.bankroll
     initial_bet = args.stake
