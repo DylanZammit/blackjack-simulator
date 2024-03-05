@@ -39,6 +39,9 @@ if __name__ == '__main__':
                         help="Rounds per game to play [def=1000]", default=1000)
     parser.add_argument("-n", "--num_games", type=int,
                         help="Number of games to play [def=100]", default=100)
+    # parser.add_argument("-p", "--plot", action='store_true',
+    #                     help="Plot Chart")
+
     args = parser.parse_args()
 
     df_bs = pd.read_csv(args.basic_strategy, index_col=0)
@@ -64,6 +67,7 @@ if __name__ == '__main__':
     ax[1].grid()
 
     bank_hists = []
+    true_count_hists = []
     house_edge = 0
 
     for i in range(args.num_games):
@@ -78,13 +82,19 @@ if __name__ == '__main__':
             initial_bet=initial_bet,
         ).run()
 
-        ax[0].plot(sim.bank_hist, color='black', alpha=0.2)
-        ax[1].plot(sim.true_count_hist, color='black', alpha=0.1)
         bank_hists.append(sim.bank_hist)
+        true_count_hists.append(sim.true_count_hist)
         house_edge += sim.house_edge
 
     house_edge = house_edge / args.num_games * 100
-    fig.suptitle(f'High-Low Strategy: (House Edge: {house_edge:.2f}%)')
+    title = f'High-Low Strategy: (House Edge: {house_edge:.2f}%)'
+
+    # if args.plot:
+    for bh, tch in zip(bank_hists, true_count_hists):
+        ax[0].plot(bh, color='black', alpha=0.2)
+        ax[1].plot(tch, color='black', alpha=0.1)
+
+    fig.suptitle(title)
 
     df_hists = pd.DataFrame(bank_hists)
     df_hists.mean().plot(ax=ax[0], color='red', alpha=1, grid=True)

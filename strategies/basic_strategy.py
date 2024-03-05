@@ -35,6 +35,8 @@ if __name__ == '__main__':
                         help="Rounds per game to play [def=1000]", default=1000)
     parser.add_argument("-n", "--num_games", type=int,
                         help="Number of games to play [def=100]", default=100)
+    # parser.add_argument("-p", "--plot", action='store_true',
+    #                     help="Plot Chart")
 
     args = parser.parse_args()
 
@@ -67,17 +69,23 @@ if __name__ == '__main__':
             initial_bet=initial_bet,
         ).run()
 
-        ax = plt.plot(sim.bank_hist, color='black', alpha=0.2)
         bank_hists.append(sim.bank_hist)
 
         house_edge += sim.house_edge
 
+    house_edge = house_edge / args.num_games * 100
+
+    title = f'Basic Strategy (House Edge: {house_edge:.2f}%)'
+    print(title)
+
+    # if args.plot:
+    for bh in bank_hists:
+        ax = plt.plot(bh, color='black', alpha=0.2)
+
     df_hists = pd.DataFrame(bank_hists)
     df_hists.mean().plot(color='red', alpha=1)
 
-    house_edge = house_edge / args.num_games * 100
-
-    plt.title(f'Basic Strategy (House Edge: {house_edge:.2f}%)')
+    plt.title(title)
     plt.suptitle(f'Bank: €{initial_bank:,}. Stake: €{initial_bet:,}')
     plt.grid()
     plt.show()
