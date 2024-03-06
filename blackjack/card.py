@@ -6,6 +6,10 @@ class Card:
     deck = 'A23456789TJQK'
 
     def __init__(self, rank: str):
+        """
+        Defines a single card from a deck of cards, where the suits are irrelevant.
+        :param rank: Can be any one of these values: A23456789TJQK
+        """
         if rank == '10':
             rank = 'T'
         elif rank in ['1', '11']:
@@ -20,6 +24,12 @@ class Card:
         return self.rank
 
     def __eq__(self, other):
+        """
+        Compares a Card with another Card object, or a Card with a string of a valid rank.
+        ex. Card('4') == '4' is a valid comparison and will return True
+        :param other:
+        :return: bool
+        """
         if isinstance(other, Card):
             return self.value == other.value
         elif isinstance(other, str):
@@ -51,6 +61,10 @@ class Card:
 
     @property
     def high_low_count(self):
+        """
+        Hi-Lo strategy card count value
+        :return: Card count value
+        """
         if isinstance(self.value, tuple):
             return -1
 

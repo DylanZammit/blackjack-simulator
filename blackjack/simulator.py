@@ -14,6 +14,17 @@ class Simulation:
             basic_strategy: dict = None,
             **kwargs
     ):
+        """
+
+        :param rounds_per_game: int containing the number of rounds of blackjack per game
+        :param initial_bet: Initial stake which is wagered. Can be accessed in the get_stake method
+        :param initial_bank: Total player bank
+        :param n_packs: number of decks to be used
+        :param double_after_split: Doubling after splitting allowed
+        :param hit_on_soft_17: Should the dealer hit on a soft 17
+        :param basic_strategy: Dict mapping the player-dealer hands to the optimal strategy
+        :param kwargs: Any kwargs to be used in the strategy or get_stake methods
+        """
         self.initial_bet = initial_bet
         self.bank = initial_bank
 
@@ -49,6 +60,12 @@ class Simulation:
         return edge
 
     def strategy(self, player_hand: Hand, dealer_hand: int) -> GameDecision:
+        """
+        Defaults to basic strategy if provided
+        :param player_hand:
+        :param dealer_hand:
+        :return: GameDecision enum with the optimal position given player-dealer hands
+        """
         if self.basic_strategy is None:
             err_msg = 'Must provide a basic strategy, otherwise override this method with a customer strategy'
             raise NotImplementedError(err_msg)
@@ -68,9 +85,17 @@ class Simulation:
         return opt_decision
 
     def get_stake(self) -> int:
+        """
+        Method to be overridden. The simplest implementation would be return self.initial_bet
+        :return:
+        """
         raise NotImplementedError('Must set up a stake strategy')
 
     def run(self):
+        """
+        Full simulation of round_per_game rounds
+        :return:
+        """
         game = self.game
         for _ in range(self.rounds_per_game):
 

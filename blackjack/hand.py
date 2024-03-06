@@ -11,6 +11,13 @@ class Hand:
             stake: int = 1,
             player_name: str | int = None,
     ):
+        """
+
+        :param cards: Cards the Hand contains
+        :param is_split: Bool indicating whether this hand resulted from a split hand
+        :param stake: Original amount wagered on this hand
+        :param player_name: optional name of the player the hand is owned by.
+        """
 
         self.player_name = player_name
         if cards is None:
@@ -27,14 +34,35 @@ class Hand:
         self.round = 0
 
     def deal_card(self, card: Card) -> None:
+        """
+        :param card: Card object to be added to the list of Cards of the Hand
+        :return: None
+        """
         if isinstance(card, str):
             card = Card(card)
         self.cards.append(card)
 
     def log_decision(self, decision: GameDecision) -> None:
+        """
+        Appends the decision and current game state to an array for a historical tracking of the decisions taken.
+        :param decision: GameDecision object with the decision
+        :return:
+        """
         self.decision_hist.append((str(self), decision.value))
 
     def value(self, soft=False) -> Union[int, tuple[int, int]]:
+        """
+        For non-Aces, it is a matter of counting the value of each card and taking the sum.
+
+        If an Ace is part of the Hand, we count it both as 1 and 11. If both possibilities are less than 21,
+        then both are valid values, and both values are returned as a tuple if soft=True.
+
+        If one of the soft values is 21, it does not make sense to consider the other value, whatever it is.
+
+        At most one Ace can count as 11, otherwise the value would exceed 21. Hence, it is automatically assumed that the second Ace onwards has a hard value of 1.
+        :param soft: bool indicating the best value of the hand in the case of a soft hand
+        :return: int for hard value, tuple of ints for soft value
+        """
         if self.num_aces == 0:
             return self.hard_value
 
@@ -67,10 +95,20 @@ class Hand:
 
     @property
     def is_blackjack(self) -> bool:
+        """
+        A blackjack must be the first two cards, on a non-split hand.
+        :return: Boolean indicating whether a hand is blackjack or not
+        """
         return len(self) == 2 and self.value() == 21 and not self.is_split
 
     @property
     def is_splittable(self) -> bool:
+        """
+        A Hand is splittable if there are only two cards of the same value.
+        In some variations, a hand is only splittable if they are of the same rank.
+        Ex. a TQ is splittable in our case, but some variations disallow it.
+        :return: Boolean indicating whether a hand is splittable or not
+        """
         return len(self) == 2 and self.cards[0].value == self.cards[1].value
 
     @property
@@ -84,14 +122,27 @@ class Hand:
 
     @property
     def is_finished(self):
+        """
+        A game is finished if the hand is LOST, WON or DRAWn
+        :return: Boolean if the status is one of the three above GameState values
+        """
         return self.status.value in [GameState.WON, GameState.DRAW, GameState.LOST]
 
     @property
     def is_idle(self):
+        """
+        A hand is idle if it is either finished or its last decision is STAND, and hence waiting for the dealer to make their turn.
+        The purpose of this method is to help the Game object decide which hand should play next. This hand will be skipped.
+        :return: Boolean indicating whether the hand is idle or not
+        """
         return self.is_finished or self.status.value == GameState.STAND
 
     @property
     def profit(self) -> float:
+        """
+        Returns the profit based on the stake and the state of the hand. The fact that BJ pays 3:2 is hardcoded here.
+        :return: Float value of the profit of the hand
+        """
         if self.status.value == GameState.WON and self.is_blackjack:
             return 1.5 * self.stake
         if self.status.value == GameState.WON:
