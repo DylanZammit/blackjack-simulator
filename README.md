@@ -1,5 +1,18 @@
 # Blackjack Simulator
 ## Table of contents
+
+1. Introduction
+2. Code
+   1. Installation
+   2. Object Structure
+   3. Playing a game
+   4. Generating Bsic Strategy
+3. Optimal Strategy
+4. Strategies
+   1. Basic Strategy
+   2. Martingale Strategy
+   3. Hi-Lo Strategy
+
 ## Introduction
 In this project I wanted to explore how Blackjack (BJ) is played, the optimal way of playing BJ, and how to beat the odds.
 
@@ -304,3 +317,8 @@ def get_stake(self) -> int:
     stake = max(self.initial_bet, multiplier * betting_unit)
     return stake
 ```
+
+We simulate 10,000 games of blackjack, each starting with bankroll of €10,000 with the above strategy. 
+This results in a house edge of -0.84%, meaning that this is in the player's advantage. Below is a visualization of these simulations.
+
+![high_low_strategy](https://github.com/DylanZammit/blackjack-simulator/blob/master/img/high_low.png?raw=true)
