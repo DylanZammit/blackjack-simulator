@@ -232,6 +232,41 @@ unning the above command and generating the optimal strategies, we obtain the fo
 |       **A,A**       | split  | split  | split  | split  | split  | split  | split  | split  | split  | split  |
 |       **A,T**       | stand  | stand  | stand  | stand  | stand  | stand  | stand  | stand  | stand  | stand  |
 ## Strategies
+Players use various strategies to play BJ, some based on intuition, other based on basic strategy, 
+and others try to beat the house by counting cards and raising the stake when there is a significant chance of a face card to show up,
+hence a high change of the dealer to bust.
+
+Ultimately, most strategies rely on playing the basic strategy or a variant of it, and only adjusting the stake when necessary.
+What typically changes is the stake played on a hand based on the game state.
+Thus our implementation of the strategy below simply inherit from the `simulator.Simulation` class
+and override the `get_stake` method.
 ### Basic Strategy
+Following the basic strategy is the simplest, yet most effective strategy were you to play blackjack without counting cards.
+It is the assumption the casino makes when deciding on the edge, and the house edge is calculated based on this assumption.
+The house edge of a game of BJ is typically less than 1%, at around 0.5%, making it one of the cheapest games in the casino for the player.
+The `get_stake` method is very simple, where the same initial stake is always played.
+```python
+def get_stake(self) -> int:
+    return self.initial_bet
+```
+Our simulated game of BJ uses rules that are mostly in favour of the player, and hence the house edge is estimated to be about 0.32%. The rules are
+* Doubling After Splitting (DAS) is allowed
+* Resplitting is allowed with no limit
+* You can hit after doubling
+* Splitting and hitting on Aces is allowed
+* Surrender not allowed
+* Dealer hits on soft 17
+![monte_carlo_basic_strategy](https://github.com/DylanZammit/blackjack-simulator/blob/master/img/basic_strategy.jpg?raw=true)
 ### Martingale Strategy
+A common strategy amongst gamblers is the martingale strategy, wherein a person bets €X, and if the wager is lost, the next wager is doubled to €2X. 
+If this wager is also lost, the next wager will again be doubled to €4X, so on and so on. Once the player wins, they will recoup all their losses and gain an extra profit
+over and above their previous losses. This strategy is a perfectly valid strategy, as a win is guaranteed with enough games played.
+In practice however, this fails for two main reasons
+* The assumption is that the player has enough money to finance their strategy, since wagers grow exponentially. This strategy essentially assumes that the player has infinite money.
+* There are no maximum wagers on games. This is usually not the case in casinos, and most BJ tables enforce a maximum stake, rendering such a strategy useless.
+
+Below is an example customer journey using the Martingale strategy. Losses are always recouped with a little extra profit,
+resulting in an overall upward trend. However, this ends abruptly since eventually there will be enough losses which the customer
+will not be able to finance since their bankroll is finite.
+![martingale_strategy](https://github.com/DylanZammit/blackjack-simulator/blob/master/img/martingale_strategy.jpg?raw=true)
 ### Hi-Lo Strategy
