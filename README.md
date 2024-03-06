@@ -49,10 +49,13 @@ Suppose that a game is to be played with the following strategy:
 * Hit otherwise.
 
 Also assume that the game is played with the following rules:
-* 6 decks of cards are used
-* Doubling after a split is allowed,
-* Any number of splits are allowed
-* dealer hits on soft 17.
+* Doubling After Splitting (DAS) is allowed,
+* Splitting and hitting Aces is allowed,
+* Re-splitting is allowed indefinitely,
+* Dealer Hits on soft 17 (a.k.a H17),
+* 6 Decks are used,
+* Surrenter is not allowed,
+* Only the original bet is lost on dealer blackjack.
 
 ```python
 from blackjack.game import Blackjack
@@ -164,15 +167,8 @@ Player Profit = €0
 </details>
 
 ### Generating Basic Strategy
-Before generating the optimal strategy, i.e. the one that maximises the player's return and minimises the house edge, the rules of the game must be decided. During development, the following rules were assumed:
-* Doubling After Splitting (DAS) is allowed,
-* Splitting and hitting Aces is allowed,
-* Re-splitting is allowed indefinitely,
-* Dealer Hits on soft 17 (a.k.a H17),
-* 6 Decks are used,
-* Only the original bet is lost on dealer blackjack.
 
-Running a simulation on such conditions and saving the output strategy can be achieved by running the following python script
+Running a simulation assuming the above game rules and saving the output strategy can be achieved by running the following python script
 
 ```
 gen_basic_strategy.py \
@@ -249,19 +245,7 @@ The `get_stake` method is very simple, where the same initial stake is always pl
 def get_stake(self) -> int:
     return self.initial_bet
 ```
-Our simulated game of BJ uses rules that are mostly in favour of the player, and hence the house edge is estimated to be about 0.32%. The rules are
-* Doubling After Splitting (DAS) is allowed
-* Resplitting is allowed with no limit
-* You can hit after doubling
-* Splitting and hitting on Aces is allowed
-* Surrender not allowed
-* Dealer hits on soft 17
-
-The `get_stake` method is implemented as follows.
-```python
-def get_stake(self) -> int:
-    return min(2 ** self.n_consecutive_losses * self.initial_bet, self.bank)
-```
+Our simulated game of BJ uses rules that are mostly in favour of the player, and hence the house edge is estimated to be about 0.32%.
 
 ![monte_carlo_basic_strategy](https://github.com/DylanZammit/blackjack-simulator/blob/master/img/basic_strategy.jpg?raw=true)
 ### Martingale Strategy
@@ -275,6 +259,12 @@ In practice however, this fails for two main reasons
 Below is an example customer journey using the Martingale strategy. Losses are always recouped with a little extra profit,
 resulting in an overall upward trend. However, this ends abruptly since eventually there will be enough losses which the customer
 will not be able to finance since their bankroll is finite.
+
+The `get_stake` method is implemented as follows.
+```python
+def get_stake(self) -> int:
+    return min(2 ** self.n_consecutive_losses * self.initial_bet, self.bank)
+```
 
 ![martingale_strategy](https://github.com/DylanZammit/blackjack-simulator/blob/master/img/martingale_strategy.jpg?raw=true)
 ### Hi-Lo Strategy
