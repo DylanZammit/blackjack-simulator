@@ -256,6 +256,13 @@ Our simulated game of BJ uses rules that are mostly in favour of the player, and
 * Splitting and hitting on Aces is allowed
 * Surrender not allowed
 * Dealer hits on soft 17
+
+The `get_stake` method is implemented as follows.
+```python
+def get_stake(self) -> int:
+    return min(2 ** self.n_consecutive_losses * self.initial_bet, self.bank)
+```
+
 ![monte_carlo_basic_strategy](https://github.com/DylanZammit/blackjack-simulator/blob/master/img/basic_strategy.jpg?raw=true)
 ### Martingale Strategy
 A common strategy amongst gamblers is the martingale strategy, wherein a person bets €X, and if the wager is lost, the next wager is doubled to €2X. 
@@ -268,5 +275,42 @@ In practice however, this fails for two main reasons
 Below is an example customer journey using the Martingale strategy. Losses are always recouped with a little extra profit,
 resulting in an overall upward trend. However, this ends abruptly since eventually there will be enough losses which the customer
 will not be able to finance since their bankroll is finite.
+
 ![martingale_strategy](https://github.com/DylanZammit/blackjack-simulator/blob/master/img/martingale_strategy.jpg?raw=true)
 ### Hi-Lo Strategy
+Card counting is less complicated than most people think. It does not involve perfect memorisation of all the previous hands that have come up, and certainly does not entail knowing exact probabilities of all outcomes of any combination of hands.
+This misconception was popularised by movies such as Rain Man and 21.
+However, most card-counting strategies assign multiple cards a value of 0, +1 or -1. 
+The card counter must only keep a running total of these three values, and there is no need to remember information about the specific cards that showed up.
+The simplest, and most popular card-counting strategy is the Hi-Lo strategy, which assigns
+* a value of +1 to cards 2, 3, 4, 5, 6
+* a value of  0 to cards 7, 8, 9
+* a value of -1 to cards 10, J, Q, K, A.
+
+Having a large positive count means that more small-value cards showed up than large value ones. 
+In turn it means that there is a significant change that dealer hits on a large-value card and busts, leaving the player with an overall positive edge.
+On the other hand, if the count is negative, it means that it is not advantageous for the player to wager a large amount since the dealer has a good chance of being dealt small-value hands, and hence comfortably fall in the range 17 to 21.
+
+The number of decks in the show also influences the decision the player takes, since a larger number of decks introduces what is called variance.
+A +2 count on a 2-deck game is much more significant than a 6-deck game, since the chances of a high-value count is still small due to the large pool of available cards in the shoe.
+Instead of the raw count, card counters use the "True Count", which is simply the count divided by the number of decks being played.
+
+In our simple implementation of this strategy, we will keep in mind the true count of the game at every iteration, and only when the true count is 2 or more,
+we will place a large-value bet, linearly increasing with the true count. In other words
+* for example for true counts of <= 1, we only stake €1, simply staying in the game and observing the count
+* when the count is 2 we play a relatively large amount, like €100
+* when the count is 3 we play €200
+* when the count is >= 4 we play €300.
+
+There are more complex variations of this strategy, where the basic strategy is dynamic depending on the true count.
+Even with this simple implementation, the player is able to beat the house, with an edge of 0.5%.
+Implementing more complex strategies allows the player to gain an even larger advantage.
+
+The `get_stake` method is implemented as follows.
+```python
+def get_stake(self) -> int:
+    betting_unit = self.bank // 100
+    multiplier = 0 if self.game.is_time_to_shuffle else min(4, (self.game.true_count - 1))
+    stake = max(self.initial_bet, multiplier * betting_unit)
+    return stake
+```
